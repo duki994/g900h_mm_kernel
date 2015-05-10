@@ -6764,6 +6764,10 @@ static int hmp_packing_ilb_needed(int cpu)
 	if (!hmp_cpu_is_slowest(cpu))
 		return 1;
 
+	/* if disabled, use normal ILB behaviour */
+	if (!hmp_packing_enable())
+		return ilb_needed;
+
 	hmp = hmp_cpu_domain(cpu);
 	for_each_cpu_and(cpu, &hmp->cpus, nohz.idle_cpus_mask) {
 		/* only idle balance if a CPU is loaded over threshold */
