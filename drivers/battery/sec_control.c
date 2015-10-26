@@ -57,7 +57,6 @@ static ssize_t store_charge_property(struct device *dev,
 enum other_types {
 	OTHER_SO_INPUT_LIMIT = 0,
 	OTHER_SO_CHARGE_LIMIT,
-	OTHER_WPC_CHARGE_LIMIT
 };
 
 struct charge_control charge_controls[] = {
@@ -80,7 +79,6 @@ struct charge_control charge_controls[] = {
 	
 	control("so_limit_input", OTHER, OTHER_SO_INPUT_LIMIT),
 	control("so_limit_charge", OTHER, OTHER_SO_CHARGE_LIMIT),
-	control("wpc_limit_charge", OTHER, OTHER_WPC_CHARGE_LIMIT),
 };
 
 #define cc(index) info->pdata->charging_current[index]
@@ -91,8 +89,6 @@ static unsigned int * pdata_field(int type) {
 			return &info->pdata->chg_charging_limit_current;
 		case OTHER_SO_CHARGE_LIMIT:
 			return &info->pdata->chg_charging_limit_current_2nd;
-		case OTHER_WPC_CHARGE_LIMIT:
-			return &info->pdata->wpc_charging_limit_current;
 		default:
 			return NULL;
 	}
