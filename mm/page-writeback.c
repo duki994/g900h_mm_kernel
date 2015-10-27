@@ -1666,6 +1666,7 @@ static struct notifier_block __cpuinitdata ratelimit_nb = {
 	.next		= NULL,
 };
 
+#ifdef CONFIG_POWERSUSPEND
 static void dirty_early_suspend(struct power_suspend *handler)
 {
 	dirty_writeback_interval = suspend_dirty_writeback_interval;
@@ -1682,7 +1683,7 @@ static struct power_suspend dirty_suspend = {
 	.suspend = dirty_early_suspend,
 	.resume = dirty_late_resume,
 };
-
+#endif
 
 /*
  * Called early on to tune the page writeback dirty limits.
