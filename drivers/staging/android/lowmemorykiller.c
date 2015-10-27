@@ -38,6 +38,9 @@
 #include <linux/oom.h>
 #include <linux/sched.h>
 #include <linux/swap.h>
+#ifdef CONFIG_POWERSUSPEND
+#include <linux/powersuspend.h>
+#endif
 #include <linux/rcupdate.h>
 #include <linux/notifier.h>
 #include <linux/delay.h>
@@ -72,6 +75,22 @@ static int lowmem_minfree[6] = {
 	4 * 1024,	/* 16MB */
 	16 * 1024,	/* 64MB */
 };
+
+#ifdef CONFIG_POWERSUSPEND /* values for screen on and off */
+static int lowmem_minfree_screen_off[6] = {
+	3 * 512,	/* 6MB */
+	2 * 1024,	/* 8MB */
+	4 * 1024,	/* 16MB */
+	16 * 1024,	/* 64MB */
+};
+static int lowmem_minfree_screen_on[6] = {
+	3 * 512,	/* 6MB */
+	2 * 1024,	/* 8MB */
+	4 * 1024,	/* 16MB */
+	16 * 1024,	/* 64MB */
+};
+#endif
+
 static int lowmem_minfree_size = 4;
 static uint32_t lowmem_lmkcount = 0;
 
@@ -439,13 +458,40 @@ static struct shrinker lowmem_shrinker = {
 	.seeks = DEFAULT_SEEKS * 16
 };
 
+#ifdef CONFIG_POWERSUSPEND
+static DEFINE_MUTEX(lmk_suspend);
+static void lowmem_power_suspend(struct power_suspend *handler) {
+
+	mutex_lock(&lmk_suspend);
+	memcpy(lowmem_minfree_screen_on, lowmem_minfree, sizeof(lowmem_minfree));
+	memcpy(lowmem_minfree, lowmem_minfree_screen_off, sizeof(lowmem_minfree_screen_off));
+	mutex_unlock(&lmk_suspend);
+
+}
+
+static void lowmem_late_resume(struct power_suspend *handler) {
+
+	mutex_lock(&lmk_suspend);
+	memcpy(lowmem_minfree, lowmem_minfree_screen_on, sizeof(lowmem_minfree_screen_on));
+	mutex_unlock(&lmk_suspend);
+
+}
+
+static struct power_suspend lowmem_suspend = {
+	.suspend = lowmem_power_suspend,
+	.resume = lowmem_late_resume,
+};
+#endif
+
 static int __init lowmem_init(void)
 {
 	register_shrinker(&lowmem_shrinker);
 #ifdef CONFIG_SEC_OOM_KILLER
 	register_oom_notifier(&android_oom_notifier);
 #endif
-
+#ifdef CONFIG_POWERSUSPEND
+	register_power_suspend(&lowmem_suspend);
+#endif
 	return 0;
 }
 
