@@ -73,10 +73,7 @@
  */
 
 
-<<<<<<< HEAD
-=======
 	UNWIND(	.fnstart			)
->>>>>>> c39891c... ARM: 8225/1: Add unwinding support for memory copy functions
 		enter	r4, lr
 	UNWIND(	.fnend				)
 
