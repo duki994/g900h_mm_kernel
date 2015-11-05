@@ -3839,7 +3839,7 @@ unsigned int hmp_next_up_threshold = 4096;
 unsigned int hmp_next_down_threshold = 4096;
 
 #ifdef CONFIG_SCHED_HMP_LITTLE_PACKING
-unsigned int hmp_packing_enabled = 1;
+unsigned int hmp_packing_enabled = 0;
 unsigned int hmp_full_threshold = 42;
 #endif
 
@@ -6765,7 +6765,7 @@ static int hmp_packing_ilb_needed(int cpu, int ilb_needed)
 		return ilb_needed;
 
 	/* if disabled, use normal ILB behaviour */
-	if (!hmp_packing_enable())
+	if (!hmp_packing_enabled)
 		return ilb_needed;
 
 	hmp = hmp_cpu_domain(cpu);
