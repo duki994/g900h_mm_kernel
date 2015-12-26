@@ -386,12 +386,8 @@ struct request_queue {
 
 	unsigned int		nr_sorted;
 	unsigned int		in_flight[2];
-	/*
-	 * Number of active block driver functions for which blk_drain_queue()
-	 * must wait. Must be incremented around functions that unlock the
-	 * queue_lock internally, e.g. scsi_request_fn().
-	 */
-	unsigned int		request_fn_active;
+	bool			request_fn_running;
+	bool			needs_rerun;
 
 	unsigned int		rq_timeout;
 	struct timer_list	timeout;
