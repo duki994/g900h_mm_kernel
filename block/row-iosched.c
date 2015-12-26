@@ -786,6 +786,7 @@ static int row_init_queue(struct request_queue *q, struct elevator_type *e)
 {
 
 	struct row_data *rdata;
+	struct elevator_queue *eq;
 	int i;
 
 	eq = elevator_alloc(q, e);
