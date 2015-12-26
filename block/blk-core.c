@@ -317,8 +317,8 @@ inline void __blk_run_queue_uncond(struct request_queue *q)
 		q->urgent_request_fn(q);
 	} else
 		q->request_fn(q);
+	}
 	q->request_fn_active--;
-}
 
 /**
  * __blk_run_queue - run a single device queue
