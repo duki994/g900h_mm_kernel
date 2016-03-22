@@ -6775,6 +6775,11 @@ static const struct trace_print_flags pageflag_names[] = {
 	{1UL << PG_scfslower,		"scfslower"	},
 	{1UL << PG_nocache,		"nocache"	},
 #endif
+	{1UL << PG_readahead, "PG_readahead" },
+#ifdef CONFIG_SCFS_LOWER_PAGECACHE_INVALIDATION
+	{1UL << PG_scfslower,		"scfslower"	},
+	{1UL << PG_nocache,		"nocache"	},
+#endif
 };
 
 static void dump_page_flags(unsigned long flags)
