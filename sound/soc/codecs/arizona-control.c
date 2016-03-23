@@ -22,6 +22,13 @@
 
 #define NOT_INIT	123456
 
+/** 
+ *  This G900H __hp_volume hook ctlval read from 
+ *  default_gain.conf
+ */
+#define ARIZONA_G900H_EXYNOS5422_HP_CTLVAL	114
+#define STOCK_HP_CTLVAL 112
+
 static struct snd_soc_codec *codec = NULL;
 static int ignore_next = 0;
 
@@ -125,7 +132,8 @@ static unsigned int __eq_sp_gain(struct arizona_control *ctl)
 
 static unsigned int __hp_volume(struct arizona_control *ctl)
 {
-	return ctl->ctlval == 112 ? ctl->value : ctl->ctlval;
+	return ctl->ctlval == ARIZONA_G900H_EXYNOS5422_HP_CTLVAL 
+				? ctl->value : ctl->ctlval;
 }
 
 static unsigned int hp_callback(struct arizona_control *ctl);
