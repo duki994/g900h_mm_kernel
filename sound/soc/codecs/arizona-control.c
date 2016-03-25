@@ -29,6 +29,12 @@
 #define ARIZONA_G900H_EXYNOS5422_HP_CTLVAL	114
 #define STOCK_HP_CTLVAL 112
 
+/* Flags for output defines. Used in eq_gain
+ * to determine if output is speaker or headphones
+ */
+#define SPK_OUTPUT	0
+#define HP_OUTPUT	1
+
 static struct snd_soc_codec *codec = NULL;
 static int ignore_next = 0;
 
@@ -125,11 +131,6 @@ static unsigned int __delta(struct arizona_control *ctl)
 	return _delta(ctl, ctl->ctlval, ctl->value);
 }
 
-static unsigned int __eq_sp_gain(struct arizona_control *ctl)
-{
-	return _delta(ctl, ctl->value, 12);
-}
-
 static unsigned int __hp_volume(struct arizona_control *ctl)
 {
 	return ctl->ctlval == ARIZONA_G900H_EXYNOS5422_HP_CTLVAL 
@@ -138,7 +139,9 @@ static unsigned int __hp_volume(struct arizona_control *ctl)
 
 static unsigned int hp_callback(struct arizona_control *ctl);
 static unsigned int hp_power(struct arizona_control *ctl);
-static unsigned int eq_gain(struct arizona_control *ctl);
+static unsigned int eq_gain_sp(struct arizona_control *ctl);
+static unsigned int eq_gain_hp(struct arizona_control *ctl);
+static unsigned int eq_gain(struct arizona_control *ctl, unsigned int input_device);
 static unsigned int sp_callback(struct arizona_control *ctl);
 static unsigned int sp_power(struct arizona_control *ctl);
 static unsigned int sp_path(struct arizona_control *ctl);
@@ -256,15 +259,15 @@ static struct arizona_control ctls[] = {
 	_ctl("eq_sp_freqs", CTL_VIRTUAL, 0, 0, 0, __simple),
 
 	_ctl("eq_hp_gain_1", CTL_ACTIVE, ARIZONA_EQ1_1, ARIZONA_EQ1_B1_GAIN_MASK,
-		ARIZONA_EQ1_B1_GAIN_SHIFT, eq_gain),
+		ARIZONA_EQ1_B1_GAIN_SHIFT, eq_gain_hp),
 	_ctl("eq_hp_gain_2", CTL_ACTIVE, ARIZONA_EQ1_1, ARIZONA_EQ1_B2_GAIN_MASK,
-		ARIZONA_EQ1_B2_GAIN_SHIFT, eq_gain),
+		ARIZONA_EQ1_B2_GAIN_SHIFT, eq_gain_hp),
 	_ctl("eq_hp_gain_3", CTL_ACTIVE, ARIZONA_EQ1_1, ARIZONA_EQ1_B3_GAIN_MASK,
-		ARIZONA_EQ1_B3_GAIN_SHIFT, eq_gain),
+		ARIZONA_EQ1_B3_GAIN_SHIFT, eq_gain_hp),
 	_ctl("eq_hp_gain_4", CTL_ACTIVE, ARIZONA_EQ1_2, ARIZONA_EQ1_B4_GAIN_MASK,
-		ARIZONA_EQ1_B4_GAIN_SHIFT, eq_gain),
+		ARIZONA_EQ1_B4_GAIN_SHIFT, eq_gain_hp),
 	_ctl("eq_hp_gain_5", CTL_ACTIVE, ARIZONA_EQ1_2, ARIZONA_EQ1_B5_GAIN_MASK,
-		ARIZONA_EQ1_B5_GAIN_SHIFT, eq_gain),
+		ARIZONA_EQ1_B5_GAIN_SHIFT, eq_gain_hp),
 
 	_ctl("eq_hp_gain_1", CTL_INERT, ARIZONA_EQ2_1, ARIZONA_EQ2_B1_GAIN_MASK,
 		ARIZONA_EQ2_B1_GAIN_SHIFT, __simple),
@@ -278,15 +281,15 @@ static struct arizona_control ctls[] = {
 		ARIZONA_EQ2_B5_GAIN_SHIFT, __simple),
 
 	_ctl("eq_sp_gain_1", CTL_ACTIVE, ARIZONA_EQ3_1, ARIZONA_EQ3_B1_GAIN_MASK,
-		ARIZONA_EQ3_B1_GAIN_SHIFT, eq_gain),
+		ARIZONA_EQ3_B1_GAIN_SHIFT, eq_gain_sp),
 	_ctl("eq_sp_gain_2", CTL_ACTIVE, ARIZONA_EQ3_1, ARIZONA_EQ3_B2_GAIN_MASK,
-		ARIZONA_EQ3_B2_GAIN_SHIFT, eq_gain),
+		ARIZONA_EQ3_B2_GAIN_SHIFT, eq_gain_sp),
 	_ctl("eq_sp_gain_3", CTL_ACTIVE, ARIZONA_EQ3_1, ARIZONA_EQ3_B3_GAIN_MASK,
-		ARIZONA_EQ3_B3_GAIN_SHIFT, eq_gain),
+		ARIZONA_EQ3_B3_GAIN_SHIFT, eq_gain_sp),
 	_ctl("eq_sp_gain_4", CTL_ACTIVE, ARIZONA_EQ3_2, ARIZONA_EQ3_B4_GAIN_MASK,
-		ARIZONA_EQ3_B4_GAIN_SHIFT, eq_gain),
+		ARIZONA_EQ3_B4_GAIN_SHIFT, eq_gain_sp),
 	_ctl("eq_sp_gain_5", CTL_ACTIVE, ARIZONA_EQ3_2, ARIZONA_EQ3_B5_GAIN_MASK,
-		ARIZONA_EQ3_B5_GAIN_SHIFT, eq_gain),
+		ARIZONA_EQ3_B5_GAIN_SHIFT, eq_gain_sp),
 
 	/* DRC Configurables */
 
@@ -332,13 +335,29 @@ static struct arizona_control ctls[] = {
 		ARIZONA_DRC1_KNEE2_OP_MASK, ARIZONA_DRC1_KNEE2_OP_SHIFT, __simple),
 };
 
-static unsigned int eq_gain(struct arizona_control *ctl)
+static unsigned int eq_gain_hp(struct arizona_control *ctl)
+{
+	return eq_gain(ctl, HP_OUTPUT);
+}
+
+static unsigned int eq_gain_sp(struct arizona_control *ctl)
+{
+	return eq_gain(ctl, SPK_OUTPUT);
+}
+
+static unsigned int eq_gain(struct arizona_control *ctl, unsigned int input_device)
 {
 	bool voice_in = ctls[EQ1ENA].ctlval || ctls[EQ2ENA].ctlval || ctls[EQ3ENA].ctlval;
 
 	if (voice_in)
 		return ctl->ctlval;
 
+	if (input_device == SPK_OUTPUT)
+		return _delta(ctl, ctl->value, 12);
+
+	if (input_device == HP_OUTPUT)
+		return _pair(ctl, 22, _delta(ctl, ctl->value, 12));
+	
 	return _pair(ctl, 22, _delta(ctl, ctl->value, 12));
 }
 
@@ -526,8 +545,8 @@ static unsigned int sp_callback(struct arizona_control *ctl)
 static bool is_delta(struct arizona_control *ctl)
 {
 	if (ctl->hook == __delta	||
-	    ctl->hook == eq_gain	||  
-	    ctl->hook == __eq_sp_gain	||
+	    ctl->hook == eq_gain_hp	||  
+	    ctl->hook == eq_gain_sp	|| 
 	    ctl->hook == sp_volume  )
 		return true;
 
