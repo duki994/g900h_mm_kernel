@@ -16,9 +16,8 @@
 #include <linux/mfd/arizona/registers.h>
 #include <linux/mfd/arizona/control.h>
 
-#if 0
-#define SYSFS_DBG
-#endif
+/* #define SYSFS_DBG */
+#define DMESG_LOG
 
 #define NOT_INIT	123456
 
@@ -119,6 +118,11 @@ static unsigned int _delta(struct arizona_control *ctl,
 	return (val + offset);
 }
 
+static inline unsigned int show_reg_val(struct arizona_control *ctl)
+{
+	return (_read(ctl->reg) & ctl->mask) >> ctl->shift;
+}
+
 /* Value hooks */
 
 static unsigned int __simple(struct arizona_control *ctl)
@@ -137,6 +141,7 @@ static unsigned int __hp_volume(struct arizona_control *ctl)
 				? ctl->value : ctl->ctlval;
 }
 
+
 static unsigned int hp_callback(struct arizona_control *ctl);
 static unsigned int hp_power(struct arizona_control *ctl);
 static unsigned int eq_gain_sp(struct arizona_control *ctl);
@@ -146,6 +151,9 @@ static unsigned int sp_callback(struct arizona_control *ctl);
 static unsigned int sp_power(struct arizona_control *ctl);
 static unsigned int sp_path(struct arizona_control *ctl);
 static unsigned int sp_volume(struct arizona_control *ctl);
+static void power_on_off_eq(unsigned int out_device, bool on_off);
+static void disable_eq(unsigned int out_device);
+static void enable_eq(unsigned int out_device);
 
 /* Sound controls */
 
@@ -371,6 +379,39 @@ static unsigned int hp_power(struct arizona_control *ctl)
 	return ctl->ctlval;
 }
 
+static void enable_eq(unsigned int out_device) 
+{
+	if (out_device == HP_OUTPUT) {
+		_ctl_set(&ctls[EQ1ENA], 1);
+		_ctl_set(&ctls[EQ2ENA], 1);	
+	} else if (out_device == SPK_OUTPUT) {
+		_ctl_set(&ctls[EQ3ENA], 1);
+		_ctl_set(&ctls[EQ4ENA], 1);
+	}
+}
+
+static void disable_eq(unsigned int out_device) 
+{
+	if (out_device == HP_OUTPUT) {
+		_ctl_set(&ctls[EQ1ENA], 0);
+		_ctl_set(&ctls[EQ2ENA], 0);	
+	} else if (out_device == SPK_OUTPUT) {
+		_ctl_set(&ctls[EQ3ENA], 0);
+		_ctl_set(&ctls[EQ4ENA], 0);
+	}
+}
+
+static void power_on_off_eq(unsigned int out_device, bool on_off) 
+{
+	if (out_device == HP_OUTPUT) {
+		_ctl_set(&ctls[EQ1ENA], on_off);
+		_ctl_set(&ctls[EQ2ENA], on_off);	
+	} else if (out_device == SPK_OUTPUT) {
+		_ctl_set(&ctls[EQ3ENA], on_off);
+		_ctl_set(&ctls[EQ4ENA], on_off);
+	}
+}
+
 static unsigned int hp_callback(struct arizona_control *ctl)
 {
 	static bool eq_bridge = false;
@@ -383,6 +424,7 @@ static unsigned int hp_callback(struct arizona_control *ctl)
 	if (ctl->type == CTL_VIRTUAL) {
 		if (ctl == &ctls[EQ_HP])
 			eq_bridge = !!ctl->value;
+		
 
 		if (ctl == &ctls[DRC_HP])
 			drc_bridge = !!ctl->value;
@@ -424,8 +466,6 @@ static unsigned int hp_callback(struct arizona_control *ctl)
 		
 		_ctl_set(&ctls[DRC1LENA], drc_bridge);
 		_ctl_set(&ctls[DRC1RENA], drc_bridge);
-		_ctl_set(&ctls[EQ1ENA], eq_bridge);
-		_ctl_set(&ctls[EQ2ENA], eq_bridge && !mono_bridge);
 
 		if (eq_bridge) {
 			_write(ctls[HPEQB1G].reg, ctls[HPEQB1G].value + 12);
@@ -441,6 +481,14 @@ static unsigned int hp_callback(struct arizona_control *ctl)
 			_write(ctls[HPEQ2B5G].reg, ctls[HPEQB5G].value + 12);
 		}
 
+		power_on_off_eq(HP_OUTPUT, eq_bridge);
+#ifdef DMESG_LOG
+		printk(KERN_DEBUG "%s: HP EQ enabled/disabled debug after mix setup\n", __func__);
+		printk(KERN_DEBUG "%s: EQ1ENA enabled: %d, EQ2ENA enabled: %d\n", 
+				__func__, 
+				show_reg_val(&ctls[EQ1ENA]),
+				show_reg_val(&ctls[EQ2ENA]));
+#endif
 		eq_bridge_live = eq_bridge;
 		drc_bridge_live = drc_bridge;
 		mono_bridge_live = mono_bridge;
@@ -485,19 +533,17 @@ static unsigned int sp_callback(struct arizona_control *ctl)
 
 	if (ctl->type == CTL_VIRTUAL) {
 		if (ctl == &ctls[EQ_SP])
-			eq_bridge = !!ctl->value;
+			eq_bridge = !!ctl->value;		
 
 		if (ctl == &ctls[SP_DSP])
 			dsp_bridge = !!ctl->value;
 	}
 
-	if (eq_bridge != eq_bridge_live || dsp_bridge != dsp_bridge_live) {
+	if (eq_bridge != eq_bridge_live || dsp_bridge != dsp_bridge_live) {			
 		if (!voice_in) {
 			if (eq_bridge) {
 				_ctl_set(&ctls[EQ3MIX1], dsp_bridge ? 128 : 32);
 				_ctl_set(&ctls[EQ3MIX2], dsp_bridge ? 128 : 33);
-				_ctl_set(&ctls[EQ4MIX1], 82);
-				_ctl_set(&ctls[SPOUT1L1], 82);
 				_ctl_set(&ctls[SPOUT1L2], 0);
 			} else {
 				_ctl_set(&ctls[SPOUT1L1], dsp_bridge ? 128 : 32);
@@ -509,9 +555,6 @@ static unsigned int sp_callback(struct arizona_control *ctl)
 			_ctl_set(&ctls[EQ2MIX1], ctls[EQ2MIX1].ctlval);
 			_ctl_set(&ctls[EQ3MIX1], ctls[EQ3MIX1].ctlval);
 		}
-
-		_ctl_set(&ctls[EQ3ENA], eq_bridge);
-		_ctl_set(&ctls[EQ4ENA], eq_bridge);
 
 		if (voice_in) {
 			_write(ctls[HPEQB1G].reg, ctls[HPEQB1G].ctlval);
@@ -535,6 +578,14 @@ static unsigned int sp_callback(struct arizona_control *ctl)
 
 		_ctl_set(&ctls[SPKVOL], ctls[SPKVOL].value);
 
+		power_on_off_eq(SPK_OUTPUT, eq_bridge);
+#ifdef DMESG_LOG
+		printk(KERN_DEBUG "%s: SP EQ enabled/disabled debug after mix setup\n", __func__);
+		printk(KERN_DEBUG "%s: EQ3ENA register value: %d, EQ4ENA register value: %d\n", 
+				__func__, 
+				show_reg_val(&ctls[EQ3ENA]),
+				show_reg_val(&ctls[EQ4ENA]));
+#endif
 		eq_bridge_live = eq_bridge && !voice_in;
 		dsp_bridge_live = dsp_bridge && !voice_in;
 	}
@@ -544,8 +595,7 @@ static unsigned int sp_callback(struct arizona_control *ctl)
 
 static bool is_delta(struct arizona_control *ctl)
 {
-	if (ctl->hook == __delta	||
-	    ctl->hook == eq_gain_hp	||  
+	if (ctl->hook == __delta	|| 
 	    ctl->hook == eq_gain_sp	|| 
 	    ctl->hook == sp_volume  )
 		return true;
@@ -573,8 +623,8 @@ void arizona_control_regmap_hook(struct regmap *pmap, unsigned int reg,
 	if (codec == NULL || pmap != codec->control_data)
 		return;
 
-#ifdef SYSFS_DBG
-	printk("%s: pre: %x -> %u\n", __func__, reg, *val);
+#ifdef DMESG_LOG
+	printk(KERN_DEBUG "%s: pre: %x -> %u\n", __func__, reg, *val);
 #endif
 
 	if (ignore_next) {
@@ -682,6 +732,7 @@ static ssize_t store_arizona_property(struct device *dev,
 	
 	if (sscanf(buf, "%d", &val) != 1)
 		return -EINVAL;
+	
 
 	if (ctl->type != CTL_VIRTUAL) {
 		if (val > (ctl->mask >> ctl->shift))
