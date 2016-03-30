@@ -1215,7 +1215,7 @@ static int dhd_suspend_resume_helper(struct dhd_info *dhd, int val, int force)
 }
 
 #if defined(CONFIG_POWERSUSPEND) && defined(DHD_USE_POWERSUSPEND)
-static void dhd_early_suspend(struct early_suspend *h)
+static void dhd_power_suspend(struct early_suspend *h)
 {
 	struct dhd_info *dhd = container_of(h, struct dhd_info, power_suspend);
 	DHD_TRACE_HW4(("%s: enter\n", __FUNCTION__));
