@@ -273,11 +273,9 @@ static int __init of_init(void)
 		__of_node_add(np);
 	mutex_unlock(&of_aliases_mutex);
 
-#if !defined(CONFIG_PROC_DEVICETREE)
-	/* Symlink to the new tree when PROC_DEVICETREE is disabled */
+	/* Symlink in /proc as required by userspace ABI */
 	if (of_allnodes)
 		proc_symlink("device-tree", NULL, "/sys/firmware/devicetree/base");
-#endif /* CONFIG_PROC_DEVICETREE */
 
 	return 0;
 }
@@ -1644,12 +1642,6 @@ int of_add_property(struct device_node *np, struct property *prop)
 
 	__of_add_property_sysfs(np, prop);
 
-#ifdef CONFIG_PROC_DEVICETREE
-	/* try to add to proc as well if it was initialized */
-	if (np->pde)
-		proc_device_tree_add_prop(np->pde, prop);
-#endif /* CONFIG_PROC_DEVICETREE */
-
 	return 0;
 }
 
@@ -1695,12 +1687,6 @@ int of_remove_property(struct device_node *np, struct property *prop)
 		return 0;
 
 	sysfs_remove_bin_file(&np->kobj, &prop->attr);
-
-#ifdef CONFIG_PROC_DEVICETREE
-	/* try to remove the proc node as well */
-	if (np->pde)
-		proc_device_tree_remove_prop(np->pde, prop);
-#endif /* CONFIG_PROC_DEVICETREE */
 
 	return 0;
 }
@@ -1757,12 +1743,6 @@ int of_update_property(struct device_node *np, struct property *newprop)
 	if (!found)
 		return -ENODEV;
 
-#ifdef CONFIG_PROC_DEVICETREE
-	/* try to add to proc as well if it was initialized */
-	if (np->pde)
-		proc_device_tree_update_prop(np->pde, newprop, oldprop);
-#endif /* CONFIG_PROC_DEVICETREE */
-
 	return 0;
 }
 
@@ -1797,22 +1777,6 @@ int of_reconfig_notify(unsigned long action, void *p)
 	return notifier_to_errno(rc);
 }
 
-#ifdef CONFIG_PROC_DEVICETREE
-static void of_add_proc_dt_entry(struct device_node *dn)
-{
-	struct proc_dir_entry *ent;
-
-	ent = proc_mkdir(strrchr(dn->full_name, '/') + 1, dn->parent->pde);
-	if (ent)
-		proc_device_tree_add_node(dn, ent);
-}
-#else
-static void of_add_proc_dt_entry(struct device_node *dn)
-{
-	return;
-}
-#endif
-
 /**
  * of_attach_node - Plug a device node into the tree and global list.
  */
@@ -1833,21 +1797,8 @@ int of_attach_node(struct device_node *np)
 	raw_spin_unlock_irqrestore(&devtree_lock, flags);
 
 	of_node_add(np);
-	of_add_proc_dt_entry(np);
 	return 0;
 }
-
-#ifdef CONFIG_PROC_DEVICETREE
-static void of_remove_proc_dt_entry(struct device_node *dn)
-{
-	proc_remove(dn->pde);
-}
-#else
-static void of_remove_proc_dt_entry(struct device_node *dn)
-{
-	return;
-}
-#endif
 
 /**
  * of_detach_node - "Unplug" a node from the device tree.
@@ -1904,7 +1855,6 @@ int of_detach_node(struct device_node *np)
 	of_node_set_flag(np, OF_DETACHED);
 	raw_spin_unlock_irqrestore(&devtree_lock, flags);
 
-	of_remove_proc_dt_entry(np);
 	of_node_remove(np);
 	return rc;
 }
