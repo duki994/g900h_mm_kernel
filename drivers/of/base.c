@@ -1531,10 +1531,6 @@ int of_add_property(struct device_node *np, struct property *prop)
 	unsigned long flags;
 	int rc;
 
-	rc = of_property_notify(OF_RECONFIG_ADD_PROPERTY, np, prop);
-	if (rc)
-		return rc;
-
 	mutex_lock(&of_mutex);
 
 	raw_spin_lock_irqsave(&devtree_lock, flags);
@@ -1545,6 +1541,9 @@ int of_add_property(struct device_node *np, struct property *prop)
 		__of_add_property_sysfs(np, prop);
 
 	mutex_unlock(&of_mutex);
+
+	if (!rc)
+		of_property_notify(OF_RECONFIG_ADD_PROPERTY, np, prop, NULL);
 
 	return rc;
 }
@@ -1588,10 +1587,6 @@ int of_remove_property(struct device_node *np, struct property *prop)
 	unsigned long flags;
 	int rc;
 
-	rc = of_property_notify(OF_RECONFIG_REMOVE_PROPERTY, np, prop);
-	if (rc)
-		return rc;
-
 	mutex_lock(&of_mutex);
 
 	raw_spin_lock_irqsave(&devtree_lock, flags);
@@ -1602,6 +1597,9 @@ int of_remove_property(struct device_node *np, struct property *prop)
 		__of_remove_property_sysfs(np, prop);
 
 	mutex_unlock(&of_mutex);
+
+	if (!rc)
+		of_property_notify(OF_RECONFIG_REMOVE_PROPERTY, np, prop, NULL);
 
 	return rc;
 }
@@ -1662,10 +1660,6 @@ int of_update_property(struct device_node *np, struct property *newprop)
 	if (!newprop->name)
 		return -EINVAL;
 
-	rc = of_property_notify(OF_RECONFIG_UPDATE_PROPERTY, np, newprop);
-	if (rc)
-		return rc;
-
 	mutex_lock(&of_mutex);
 
 	raw_spin_lock_irqsave(&devtree_lock, flags);
@@ -1676,6 +1670,9 @@ int of_update_property(struct device_node *np, struct property *newprop)
 		__of_update_property_sysfs(np, newprop, oldprop);
 
 	mutex_unlock(&of_mutex);
+
+	if (!rc)
+		of_property_notify(OF_RECONFIG_UPDATE_PROPERTY, np, newprop, oldprop);
 
 	return rc;
 }
