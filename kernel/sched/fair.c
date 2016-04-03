@@ -4555,11 +4555,6 @@ int set_hmp_power_migration(int value)
 	return hmp_power_migration_from_sysfs(value);
 }
 
-int set_hmp_power_migration(int value)
-{
-	return hmp_power_migration_from_sysfs(value);
-}
-
 int set_hmp_up_threshold(int value)
 {
 	return hmp_up_threshold_from_sysfs(value);
