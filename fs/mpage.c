@@ -48,7 +48,23 @@ static void mpage_end_io(struct bio *bio, int err)
 
 	bio_for_each_segment_all(bv, bio, i) {
 		struct page *page = bv->bv_page;
-		page_endio(page, bio_data_dir(bio), err);
+
+		if (bio_data_dir(bio) == READ) {
+			if (!err) {
+				SetPageUptodate(page);
+			} else {
+				ClearPageUptodate(page);
+				SetPageError(page);
+			}
+			unlock_page(page);
+		} else { /* bio_data_dir(bio) == WRITE */
+			if (err) {
+				SetPageError(page);
+				if (page->mapping)
+					set_bit(AS_EIO, &page->mapping->flags);
+			}
+			end_page_writeback(page);
+		}
 	}
 
 	bio_put(bio);
@@ -428,35 +444,6 @@ struct mpage_data {
 	unsigned use_writepage;
 };
 
-/*
- * We have our BIO, so we can now mark the buffers clean.  Make
- * sure to only clean buffers which we know we'll be writing.
- */
-static void clean_buffers(struct page *page, unsigned first_unmapped)
-{
-	unsigned buffer_counter = 0;
-	struct buffer_head *bh, *head;
-	if (!page_has_buffers(page))
-		return;
-	head = page_buffers(page);
-	bh = head;
-
-	do {
-		if (buffer_counter++ == first_unmapped)
-			break;
-		clear_buffer_dirty(bh);
-		bh = bh->b_this_page;
-	} while (bh != head);
-
-	/*
-	 * we cannot drop the bh if the page is not uptodate or a concurrent
-	 * readpage would fail to serialize with the bh and it would read from
-	 * disk before we reach the platter.
-	 */
-	if (buffer_heads_over_limit && PageUptodate(page))
-		try_to_free_buffers(page);
-}
-
 static int __mpage_writepage(struct page *page, struct writeback_control *wbc,
 		      void *data)
 {
@@ -616,7 +603,30 @@ alloc_new:
 		goto alloc_new;
 	}
 
-	clean_buffers(page, first_unmapped);
+	/*
+	 * OK, we have our BIO, so we can now mark the buffers clean.  Make
+	 * sure to only clean buffers which we know we'll be writing.
+	 */
+	if (page_has_buffers(page)) {
+		struct buffer_head *head = page_buffers(page);
+		struct buffer_head *bh = head;
+		unsigned buffer_counter = 0;
+
+		do {
+			if (buffer_counter++ == first_unmapped)
+				break;
+			clear_buffer_dirty(bh);
+			bh = bh->b_this_page;
+		} while (bh != head);
+
+		/*
+		 * we cannot drop the bh if the page is not uptodate
+		 * or a concurrent readpage would fail to serialize with the bh
+		 * and it would read from disk before we reach the platter.
+		 */
+		if (buffer_heads_over_limit && PageUptodate(page))
+			try_to_free_buffers(page);
+	}
 
 	BUG_ON(PageWriteback(page));
 	set_page_writeback(page);
