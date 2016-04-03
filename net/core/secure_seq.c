@@ -10,12 +10,27 @@
 
 #include <net/secure_seq.h>
 
-static u32 net_secret[MD5_MESSAGE_BYTES / 4] ____cacheline_aligned;
+#if IS_ENABLED(CONFIG_IPV6) || IS_ENABLED(CONFIG_INET)
+#define NET_SECRET_SIZE (MD5_MESSAGE_BYTES / 4)
+
+static u32 net_secret[NET_SECRET_SIZE] ____cacheline_aligned;
 
 void net_secret_init(void)
 {
-	get_random_bytes(net_secret, sizeof(net_secret));
+	u32 tmp;
+	int i;
+
+	if (likely(net_secret[0]))
+		return;
+
+	for (i = NET_SECRET_SIZE; i > 0;) {
+		do {
+			prandom_bytes(&tmp, sizeof(tmp));
+		} while (!tmp);
+		cmpxchg(&net_secret[--i], 0, tmp);
+	}
 }
+#endif
 
 #ifdef CONFIG_INET
 static u32 seq_scale(u32 seq)
