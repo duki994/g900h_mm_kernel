@@ -15,8 +15,18 @@
 #include <linux/seq_file.h>
 #include <linux/debugfs.h>
 #include <trace/events/power.h>
+#include <linux/moduleparam.h>
 
 #include "power.h"
+
+static bool enable_sensorhub_wl = true;
+module_param(enable_sensorhub_wl, bool, 0644);
+
+static bool enable_ssp_wl = true;
+module_param(enable_ssp_wl, bool, 0644);
+
+static bool l2_hsic_wl = true;
+module_param(l2_hsic_wl, bool, 0644);
 
 /*
  * If set, the suspend/hibernate code will abort transitions to a sleep state
@@ -381,6 +391,21 @@ EXPORT_SYMBOL_GPL(device_set_wakeup_enable);
 static void wakeup_source_activate(struct wakeup_source *ws)
 {
 	unsigned int cec;
+
+	if (!enable_sensorhub_wl && !strcmp(ws->name, "ssp_sensorhub_wake_lock")) {
+		pr_info("wakeup source sensorhub activation skipped\n");
+		return;
+	}
+
+        if (!enable_ssp_wl && !strcmp(ws->name, "ssp_wake_lock")) {
+                pr_info("wakeup source SSP activation skipped\n");
+                return;
+        }
+
+        if (!l2_hsic_wl && !strcmp(ws->name, "l2_hsic")) {
+                pr_info("l2_hsic wakeup source skipped\n");
+                return;
+        }
 
 	/*
 	 * active wakeup source should bring the system
