@@ -218,7 +218,7 @@ module_param_named(enable_adaptive_lmk, enable_adaptive_lmk, int,
  * 90-94. Usually this is a pseudo minfree value, higher than the
  * highest configured value in minfree array.
  */
-static int vmpressure_file_min = 65560;
+static int vmpressure_file_min = 66560; /* (65 * 1024) * 4 = 266 MB */
 module_param_named(vmpressure_file_min, vmpressure_file_min, int,
 	S_IRUGO | S_IWUSR);
 
@@ -255,8 +255,11 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 	unsigned long pressure = action;
 	int array_size = ARRAY_SIZE(lowmem_adj);
 
-	if (!enable_adaptive_lmk)
-		return 0;
+	if (!enable_adaptive_lmk) {
+		if (lmk_vm_pressure > 0)
+			lmk_vm_pressure = 0;
+ 		return 0;
+	}
 
 	if (pressure >= 95) {
 		other_file = global_page_state(NR_FILE_PAGES) -
