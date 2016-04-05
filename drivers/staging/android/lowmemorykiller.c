@@ -207,7 +207,7 @@ static atomic_t shift_adj = ATOMIC_INIT(0);
 static short adj_max_shift = 353;
 
 /* User knob to enable/disable adaptive lmk feature */
-static int enable_adaptive_lmk = 1;
+static int enable_adaptive_lmk = 0;
 module_param_named(enable_adaptive_lmk, enable_adaptive_lmk, int,
 	S_IRUGO | S_IWUSR);
 
@@ -218,7 +218,7 @@ module_param_named(enable_adaptive_lmk, enable_adaptive_lmk, int,
  * 90-94. Usually this is a pseudo minfree value, higher than the
  * highest configured value in minfree array.
  */
-static int vmpressure_file_min = 66560; /* (65 * 1024) * 4 = 266 MB */
+static int vmpressure_file_min = 76800; /* (75 * 1024) * 4 = 307 MB */
 module_param_named(vmpressure_file_min, vmpressure_file_min, int,
 	S_IRUGO | S_IWUSR);
 
