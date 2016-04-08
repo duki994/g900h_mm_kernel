@@ -1135,7 +1135,7 @@ static unsigned int fanout_demux_hash(struct packet_fanout *f,
 				      struct sk_buff *skb,
 				      unsigned int num)
 {
-	return (u32)(((u64) skb->rxhash * num) >> 32);
+	return (((u64) skb->rxhash * num) >> 32);
 }
 
 static unsigned int fanout_demux_lb(struct packet_fanout *f,
