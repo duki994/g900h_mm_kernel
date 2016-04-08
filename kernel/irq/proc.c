@@ -348,6 +348,7 @@ void register_handler_proc(unsigned int irq, struct irqaction *action)
 
 void register_irq_proc(unsigned int irq, struct irq_desc *desc)
 {
+	static DEFINE_MUTEX(register_lock);
 	char name [MAX_NAMELEN];
 
 	if (!root_irq_dir || (desc->irq_data.chip == &no_irq_chip) || desc->dir)
