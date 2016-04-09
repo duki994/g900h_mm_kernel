@@ -159,7 +159,7 @@ ENTRY(cpu_pj4b_do_idle)
 	dsb					@ WFI may enter a low-power mode
 	wfi
 	dsb					@barrier
-	mov	pc, lr
+	ret	lr
 ENDPROC(cpu_pj4b_do_idle)
 #else
 	globl_equ	cpu_pj4b_do_idle,  	cpu_v7_do_idle
@@ -190,6 +190,10 @@ __v7_ca9mp_setup:
 	b	1f
 __v7_ca7mp_setup:
 __v7_ca15mp_setup:
+	mrc	p15, 0, r0, c1, c0, 1
+	orr	r0, #(1<<24)			@ Enable NCSE in ACTLR
+	mcr	p15, 0, r0, c1, c0, 1
+__v7_ca53mp_setup:
 	mov	r10, #0
 1:
 #ifdef CONFIG_SMP
@@ -386,6 +390,31 @@ __v7_setup:
 	mcr	p15, 0, r5, c10, c2, 0		@ write PRRR
 	mcr	p15, 0, r6, c10, c2, 1		@ write NMRR
 #endif
+
+#if defined(CONFIG_ARCH_MSM_SCORPION) && !defined(CONFIG_MSM_SMP)
+	mov     r0, #0x33
+	mcr     p15, 3, r0, c15, c0, 3          @ set L2CR1
+#endif
+#if defined (CONFIG_ARCH_MSM_SCORPION)
+	mrc     p15, 0, r0, c1, c0, 1           @ read ACTLR
+#ifdef CONFIG_CPU_CACHE_ERR_REPORT
+	orr     r0, r0, #0x37                   @ turn on L1/L2 error reporting
+#else
+	bic     r0, r0, #0x37
+#endif
+#if defined (CONFIG_ARCH_MSM_SCORPIONMP)
+	orr    r0, r0, #0x1 << 24     @ optimal setting for Scorpion MP
+#endif
+#ifndef CONFIG_ARCH_MSM_KRAIT
+	mcr     p15, 0, r0, c1, c0, 1           @ write ACTLR
+#endif
+#endif
+#if defined (CONFIG_ARCH_MSM_SCORPIONMP)
+	mrc     p15, 3, r0, c15, c0, 2  @ optimal setting for Scorpion MP
+	orr         r0, r0, #0x1 << 21
+	mcr     p15, 3, r0, c15, c0, 2
+#endif
+
 	dsb					@ Complete invalidations
 #ifndef CONFIG_ARM_THUMBEE
 	mrc	p15, 0, r0, c0, c1, 0		@ read ID_PFR0 for ThumbEE
@@ -527,6 +556,16 @@ __krait_proc_info:
 	 */
 	__v7_proc __v7_setup, hwcaps = HWCAP_IDIV
 	.size	__krait_proc_info, . - __krait_proc_info
+
+	/*
+	 * ARM Ltd. Cortex A53 processor.
+	 */
+	.type	__v7_ca53mp_proc_info, #object
+__v7_ca53mp_proc_info:
+	.long	0x410fd030
+	.long	0xff0ffff0
+	__v7_proc __v7_ca53mp_setup
+	.size	__v7_ca53mp_proc_info, . - __v7_ca53mp_proc_info
 
 	/*
 	 * Match any ARMv7 processor core.
