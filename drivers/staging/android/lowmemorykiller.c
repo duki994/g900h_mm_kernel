@@ -531,6 +531,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 	struct task_struct *selected[MANAGED_PROCESS_TYPES] = {NULL};
 	unsigned int uid = 0;
 	unsigned long rem = 0;
+	unsigned long ret = 0;
 
 	int tasksize;
 	int i;
@@ -581,7 +582,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		global_page_state(NR_INACTIVE_ANON) +
 		global_page_state(NR_INACTIVE_FILE);
 	if (min_score_adj == OOM_SCORE_ADJ_MAX + 1) {
-		lowmem_print(5, "lowmem_shrink %lu, %x, return %d\n",
+		lowmem_print(5, "lowmem_shrink %lu, %x, return %lu\n",
 			     sc->nr_to_scan, sc->gfp_mask, rem);
 
 
@@ -592,7 +593,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 	}
 
 
-	selected_oom_score_adj = min_score_adj;
+	selected_oom_score_adj[proc_type] = min_score_adj;
 
 	rcu_read_lock();
 #ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
@@ -702,7 +703,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 
 		lowmem_lmkcount++;
 
-	lowmem_print(4, "lowmem_shrink %lu, %x, return %d\n",
+	lowmem_print(4, "lowmem_shrink %lu, %x, return %lu\n",
 		     sc->nr_to_scan, sc->gfp_mask, rem);
 	return rem;
 }
@@ -921,7 +922,7 @@ static int android_oom_handler(struct notifier_block *nb,
 
 static struct notifier_block android_oom_notifier = {
 	.notifier_call = android_oom_handler,
-}
+};
 
 
 #endif /* CONFIG_SEC_OOM_KILLER */
