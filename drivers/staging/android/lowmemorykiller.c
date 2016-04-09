@@ -593,7 +593,9 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 	}
 
 
-	selected_oom_score_adj[proc_type] = min_score_adj;
+	/* Set the initial oom_score_adj for each managed process type */
+	for (proc_type = KILLABLE_PROCESS; proc_type < MANAGED_PROCESS_TYPES; proc_type++)
+		selected_oom_score_adj[proc_type] = min_score_adj;
 
 	rcu_read_lock();
 #ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
