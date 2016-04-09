@@ -516,12 +516,22 @@ static bool protected_apps(char *comm)
 }
 #endif
 
-static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+static unsigned long lowmem_count(struct shrinker *s,
+				  struct shrink_control *sc)
+{
+	return global_page_state(NR_ACTIVE_ANON) +
+		global_page_state(NR_ACTIVE_FILE) +
+		global_page_state(NR_INACTIVE_ANON) +
+		global_page_state(NR_INACTIVE_FILE);
+}
+
+static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 {
 	struct task_struct *tsk;
 	struct task_struct *selected[MANAGED_PROCESS_TYPES] = {NULL};
-	int rem = 0;
-	int ret = 0;
+	unsigned int uid = 0;
+	unsigned long rem = 0;
+
 	int tasksize;
 	int i;
 	short min_score_adj = OOM_SCORE_ADJ_MAX + 1;
@@ -560,6 +570,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			break;
 		}
 	}
+
 	if (sc->nr_to_scan > 0) {
 		ret = adjust_minadj(&min_score_adj);
 		lowmem_print(3, "lowmem_shrink %lu, %x, ofree %d %d, ma %hd\n",
@@ -575,16 +586,16 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		lowmem_print(5, "lowmem_shrink %lu, %x, return %d\n",
 			     sc->nr_to_scan, sc->gfp_mask, rem);
 
+
 		if ((min_score_adj == OOM_SCORE_ADJ_MAX + 1) &&
 			(sc->nr_to_scan > 0))
 			trace_almk_shrink(0, ret, other_free, other_file, 0);
 
-		return rem;
+		return 0;
 	}
 
-	/* Set the initial oom_score_adj for each managed process type */
-	for (proc_type = KILLABLE_PROCESS; proc_type < MANAGED_PROCESS_TYPES; proc_type++)
-		selected_oom_score_adj[proc_type] = min_score_adj;
+
+	selected_oom_score_adj = min_score_adj;
 
 	rcu_read_lock();
 #ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
@@ -913,12 +924,15 @@ static int android_oom_handler(struct notifier_block *nb,
 
 static struct notifier_block android_oom_notifier = {
 	.notifier_call = android_oom_handler,
-};
+}
+
+
 #endif /* CONFIG_SEC_OOM_KILLER */
 
 static struct shrinker lowmem_shrinker = {
-	.shrink = lowmem_shrink,
-	.seeks = 32
+	.scan_objects = lowmem_scan,
+	.count_objects = lowmem_count,
+	.seeks = DEFAULT_SEEKS * 16
 };
 
 static int __init lowmem_init(void)
