@@ -571,24 +571,21 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		}
 	}
 
-	if (sc->nr_to_scan > 0) {
-		ret = adjust_minadj(&min_score_adj);
-		lowmem_print(3, "lowmem_shrink %lu, %x, ofree %d %d, ma %hd\n",
+	ret = adjust_minadj(&min_score_adj);
+	lowmem_print(3, "lowmem_shrink %lu, %x, ofree %d %d, ma %hd\n",
 				sc->nr_to_scan, sc->gfp_mask, other_free,
 				other_file, min_score_adj);
-	}
 
 	rem = global_page_state(NR_ACTIVE_ANON) +
 		global_page_state(NR_ACTIVE_FILE) +
 		global_page_state(NR_INACTIVE_ANON) +
 		global_page_state(NR_INACTIVE_FILE);
-	if (sc->nr_to_scan <= 0 || min_score_adj == OOM_SCORE_ADJ_MAX + 1) {
+	if (min_score_adj == OOM_SCORE_ADJ_MAX + 1) {
 		lowmem_print(5, "lowmem_shrink %lu, %x, return %d\n",
 			     sc->nr_to_scan, sc->gfp_mask, rem);
 
 
-		if ((min_score_adj == OOM_SCORE_ADJ_MAX + 1) &&
-			(sc->nr_to_scan > 0))
+		if ((min_score_adj == OOM_SCORE_ADJ_MAX + 1))
 			trace_almk_shrink(0, ret, other_free, other_file, 0);
 
 		return 0;
