@@ -150,7 +150,7 @@ typedef struct kbase_device kbase_device;
 
 /* MALI_SEC */
 #ifdef CONFIG_MALI_EXYNOS_TRACE
-#define KBASE_TRACE_SIZE_LOG2 10	/* 1024 entries */
+#define KBASE_TRACE_SIZE_LOG2 9	/* 512 entries */
 #else
 #define KBASE_TRACE_SIZE_LOG2 8	/* 256 entries */
 #endif
