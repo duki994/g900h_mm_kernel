@@ -25,6 +25,14 @@
 #include "gpu_control.h"
 #include "mach/asv-exynos.h"
 
+#ifdef CONFIG_POWERSUSPEND
+#include <linux/powersuspend.h>
+#endif
+
+unsigned int gpu_min_override = 177;
+unsigned int gpu_max_override = 543;
+unsigned int gpu_max_override_screen_off = 0;
+
 struct kbase_device *pkbdev;
 
 #ifdef CONFIG_MALI_T6XX_DVFS
@@ -219,6 +227,16 @@ static int gpu_set_clk_vol(struct kbase_device *kbdev, int clock, int voltage)
 	if (!platform)
 		return -ENODEV;
 
+	if (clock < gpu_min_override)
+		clock = gpu_min_override;
+	if (power_suspended || gpu_max_override_screen_off == 0) {
+		if (clock > gpu_max_override)
+			clock = gpu_max_override;
+	} else {
+		if (clock > gpu_max_override_screen_off)
+			clock = gpu_max_override_screen_off;
+	}
+	
 	if ((clock > platform->table[platform->table_size-1].clock) || (clock < platform->table[0].clock)) {
 		GPU_LOG(DVFS_ERROR, "Mismatch clock error (%d)\n", clock);
 		return -1;
