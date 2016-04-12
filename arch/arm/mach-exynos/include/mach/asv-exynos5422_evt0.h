@@ -29,7 +29,7 @@
 #define MIF_V240_MAX_VOLT		(962500)
 #define MIF_V230_MAX_VOLT		(962500)
 
-#define G3D_DVFS_LEVEL_NR		(7)
+#define G3D_DVFS_LEVEL_NR		(9)
 #define G3D_ASV_GRP_NR			(14)
 #define G3D_MAX_VOLT			(975000)
 #define G3D_V240_MAX_VOLT		(1000000)
