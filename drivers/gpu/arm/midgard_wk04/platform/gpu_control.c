@@ -25,6 +25,8 @@
 #include "gpu_control.h"
 #include "mach/asv-exynos.h"
 
+#include <linux/duki994_control.h>
+
 #ifdef CONFIG_POWERSUSPEND
 #include <linux/powersuspend.h>
 #endif
@@ -49,6 +51,17 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 	struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
 	if (!platform)
 		return -ENODEV;
+
+	/* check freq here before state change */
+	if (param < gpu_min_override)
+		param = gpu_min_override;
+	if (power_suspended || gpu_max_override_screen_off == 0) {
+		if (param > gpu_max_override)
+			param = gpu_max_override;
+	} else {
+		if (param > gpu_max_override_screen_off)
+			param = gpu_max_override_screen_off;
+	}
 
 	mutex_lock(&platform->gpu_clock_lock);
 	switch (state) {
@@ -119,7 +132,11 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 #ifdef CONFIG_MALI_T6XX_DVFS
 		spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
 		if (platform->dvfs_status && platform->wakeup_lock)
-			platform->cur_clock = MALI_DVFS_START_FREQ;
+			platform->cur_clock = gpu_min_override; /* Dusan K. (duki994) - set min freq to userspace control set min freq */ 
+		
+		/* Dusan K. (duki994) force userspace set locks for sysfs min/max control */
+		platform->min_lock = gpu_min_override;
+		platform->max_lock = gpu_max_override;		
 
 		if (platform->min_lock > 0)
 			platform->cur_clock = MAX(platform->min_lock, platform->cur_clock);
@@ -226,16 +243,6 @@ static int gpu_set_clk_vol(struct kbase_device *kbdev, int clock, int voltage)
 	struct exynos_context *platform = (struct exynos_context *)kbdev->platform_context;
 	if (!platform)
 		return -ENODEV;
-
-	if (clock < gpu_min_override)
-		clock = gpu_min_override;
-	if (power_suspended || gpu_max_override_screen_off == 0) {
-		if (clock > gpu_max_override)
-			clock = gpu_max_override;
-	} else {
-		if (clock > gpu_max_override_screen_off)
-			clock = gpu_max_override_screen_off;
-	}
 	
 	if ((clock > platform->table[platform->table_size-1].clock) || (clock < platform->table[0].clock)) {
 		GPU_LOG(DVFS_ERROR, "Mismatch clock error (%d)\n", clock);

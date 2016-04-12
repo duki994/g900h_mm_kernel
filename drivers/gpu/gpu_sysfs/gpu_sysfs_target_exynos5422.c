@@ -26,11 +26,6 @@
  * *********************************************************************
  * */
 
-extern unsigned int gpu_min_override;
-extern unsigned int gpu_max_override;
-extern unsigned int gpu_max_override_screen_off;
-
-
 ssize_t gpu_min_clock_write(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	unsigned int freq = 0;

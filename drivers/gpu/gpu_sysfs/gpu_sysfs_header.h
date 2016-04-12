@@ -17,6 +17,9 @@
 #include 	<linux/buffer_head.h>
 #include 	<linux/string.h>
 
+/* extern variables for freq change */
+#include <linux/duki994_control.h>
+
 /* Some necessary defines and typedefs. */
 #define  	GPU_SYSFS_MODULE_NAME	"gpusysfs"
 #define  	DEVNAME_SIZE			32
