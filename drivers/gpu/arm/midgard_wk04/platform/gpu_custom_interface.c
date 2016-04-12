@@ -358,7 +358,7 @@ static ssize_t show_volt_table(struct device *dev, struct device_attribute *attr
 		return -ENODEV;
 
 	max = 0; /* max DVFS level (100MHz) */
-	min = 5; /* min DVFS level (533MHz) */
+	min = 7; /* min DVFS level (677MHz) */
 	pr_len = (size_t)((PAGE_SIZE - 2) / (min-max));
 
 	for (i = max; i <= min; i++) {
@@ -375,7 +375,7 @@ static ssize_t set_volt_table(struct device *dev, struct device_attribute *attr,
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 	int max = 0; /* max DVFS level (100MHz) */
-	int min = 5; /* min DVFS level (533MHz) */
+	int min = 7; /* min DVFS level (677MHz) */
 	int i, tokens, rest, target;
 	int t[min - max];
 	unsigned long flags;

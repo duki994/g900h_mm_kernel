@@ -44,7 +44,7 @@ typedef enum {
 /* mali_kbase_platform */
 #if SOC_NAME == 5422
 #ifdef CONFIG_SOC_EXYNOS5422_REV_0
-#define G3D_MAX_FREQ    543000
+#define G3D_MAX_FREQ    677000
 #else
 #define G3D_MAX_FREQ    533000
 #endif /* CONFIG_SOC_EXYNOS5422_REV_0 */
@@ -64,9 +64,9 @@ typedef enum {
 
 /* GPU NOTIFIER */
 #if SOC_NAME == 5422
-#define GPU_THROTTLING_90_95    480
-#define GPU_THROTTLING_95_100   266
-#define GPU_THROTTLING_100_105  177
+#define GPU_THROTTLING_90_95    543
+#define GPU_THROTTLING_95_100   420
+#define GPU_THROTTLING_100_105  350
 #define GPU_THROTTLING_105_110  177
 #define GPU_TRIPPING_110        177
 #define VOLTAGE_OFFSET_MARGIN   37500
