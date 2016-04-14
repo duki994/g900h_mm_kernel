@@ -52,15 +52,10 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 	if (!platform)
 		return -ENODEV;
 
-	/* check freq here before state change */
-	if (param < gpu_min_override)
-		param = gpu_min_override;
-	if (power_suspended || gpu_max_override_screen_off == 0) {
-		if (param > gpu_max_override)
-			param = gpu_max_override;
-	} else {
-		if (param > gpu_max_override_screen_off)
-			param = gpu_max_override_screen_off;
+	/* Dusan K. (duki994) - if device is awake properly set min/max */
+	if (!power_suspended) {
+		param = param < gpu_min_override ? gpu_min_override : param;
+		param = param > gpu_max_override ? gpu_max_override : param;
 	}
 
 	mutex_lock(&platform->gpu_clock_lock);
