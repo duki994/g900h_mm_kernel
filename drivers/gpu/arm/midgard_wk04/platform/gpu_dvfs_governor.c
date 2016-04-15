@@ -238,7 +238,7 @@ static int gpu_dvfs_governor_interactive(struct kbase_device *kbdev, int utiliza
 	if (!platform)
 		return -ENODEV;
 
-	if ((platform->step > gpu_dvfs_get_level(platform, platform->max_lock))
+	if ((platform->step < gpu_dvfs_get_level(platform, platform->max_lock))
 			&& (utilization > platform->table[platform->step].max_threshold)) {
 		if ((platform->interactive.highspeed_level > 0) 
 				&& (utilization > platform->interactive.highspeed_load)) {
@@ -253,7 +253,7 @@ static int gpu_dvfs_governor_interactive(struct kbase_device *kbdev, int utiliza
 			platform->interactive.delay_count = 0;
 		}
 		platform->down_requirement = platform->table[platform->step].stay_count;
-	} else if ((platform->step < gpu_dvfs_get_level(platform, platform->min_lock))
+	} else if ((platform->step > gpu_dvfs_get_level(platform, platform->min_lock))
 			&& (utilization < platform->table[platform->step].min_threshold)) {
 		platform->interactive.delay_count = 0;
 		platform->down_requirement--;
