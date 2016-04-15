@@ -809,8 +809,8 @@ static ssize_t set_highspeed_clock(struct device *dev, struct device_attribute *
 		return -ENOENT;
 	}
 
-	if (highspeed_clock > platform->min_lock)
-		highspeed_clock = platform->min_lock;
+	if (highspeed_clock > platform->max_lock)
+		highspeed_clock = platform->max_lock;
 
 	spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
 	platform->interactive.highspeed_clock = highspeed_clock;
