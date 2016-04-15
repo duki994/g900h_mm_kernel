@@ -53,10 +53,14 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 		return -ENODEV;
 
 	/* Dusan K. (duki994) - if device is awake properly set min/max */
+#ifdef CONFIG_POWERSUSPEND
 	if (!power_suspended) {
+#endif
 		param = param < gpu_min_override ? gpu_min_override : param;
 		param = param > gpu_max_override ? gpu_max_override : param;
+#ifdef CONFIG_POWERSUSPEND
 	}
+#endif
 
 	mutex_lock(&platform->gpu_clock_lock);
 	switch (state) {
