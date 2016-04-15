@@ -240,6 +240,7 @@ static int gpu_dvfs_governor_interactive(struct kbase_device *kbdev, int utiliza
 
 	if ((platform->step < gpu_dvfs_get_level(platform, platform->max_lock))
 			&& (utilization > platform->table[platform->step].max_threshold)) {
+		platform->interactive.highspeed_level = gpu_dvfs_get_level(platform, platform->interactive.highspeed_clock);
 		if ((platform->interactive.highspeed_level > 0) 
 				&& (utilization > platform->interactive.highspeed_load)) {
 			if (platform->interactive.delay_count == platform->interactive.highspeed_delay) {
@@ -345,7 +346,6 @@ int gpu_dvfs_governor_init(struct kbase_device *kbdev, int governor_type)
 		platform->interactive.highspeed_clock = 480;
 		platform->interactive.highspeed_load = 85;
 		platform->interactive.highspeed_delay = 0;
-		platform->interactive.highspeed_level = gpu_dvfs_get_level(platform, platform->interactive.highspeed_clock);
 		platform->interactive.delay_count = 0;
 		break;
 	default:
