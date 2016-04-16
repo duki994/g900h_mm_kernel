@@ -58,6 +58,28 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 #endif
 		param = param < gpu_min_override ? gpu_min_override : param;
 		param = param > gpu_max_override ? gpu_max_override : param;
+
+		/* Dusan K. (duki994) - save some cpu by checking min and max platform lock */
+		/* if min/max lock are same as userspace set locks, then skip this code */
+		if (platform->min_lock != gpu_min_override) {
+			platform->min_lock = gpu_min_override;
+			ret = gpu_dvfs_handler_control(kbdev, GPU_HANDLER_DVFS_GET_LEVEL, gpu_min_override);
+			if (ret >= 0)
+				platform->min_dvfs_level
+					= gpu_dvfs_handler_control(kbdev, GPU_HANDLER_DVFS_GET_LEVEL, gpu_min_override);
+			else
+				GPU_LOG(DVFS_ERROR, "Invalid dvfs level returned - duki994 min dvfs lvl override\n");
+		}
+
+		if (platform->max_lock != gpu_max_override) {
+			platform->max_lock = gpu_max_override;
+			ret = gpu_dvfs_handler_control(kbdev, GPU_HANDLER_DVFS_GET_LEVEL, gpu_max_override);
+			if (ret >= 0)
+				platform->max_dvfs_level
+					 = gpu_dvfs_handler_control(kbdev, GPU_HANDLER_DVFS_GET_LEVEL, gpu_max_override);
+			else
+				GPU_LOG(DVFS_ERROR, "Invalid dvfs level returned - duki994 max dvfs lvl override\n");
+		}
 #ifdef CONFIG_POWERSUSPEND
 	}
 #endif
@@ -134,8 +156,11 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 			platform->cur_clock = gpu_min_override; /* Dusan K. (duki994) - set min freq to userspace control set min freq */ 
 		
 		/* Dusan K. (duki994) force userspace set locks for sysfs min/max control */
-		platform->min_lock = gpu_min_override;
-		platform->max_lock = gpu_max_override;		
+		if (platform->min_lock != gpu_min_override)
+			platform->min_lock = gpu_min_override;
+
+		if (platform->max_lock != gpu_max_override)
+			platform->max_lock = gpu_max_override;		
 
 		if (platform->min_lock > 0)
 			platform->cur_clock = MAX(platform->min_lock, platform->cur_clock);

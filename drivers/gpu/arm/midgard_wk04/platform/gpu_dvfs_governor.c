@@ -125,7 +125,7 @@ static int gpu_dvfs_governor_default(struct kbase_device *kbdev, int utilization
 	if (!platform)
 		return -ENODEV;
 
-	if ((platform->step < platform->table_size-1) &&
+	if ((platform->step < platform->max_dvfs_level) &&
 			(utilization > platform->table[platform->step].max_threshold)) {
 		platform->step++;
 #ifdef CONFIG_MALI_HWCNT_UTIL
@@ -136,7 +136,7 @@ static int gpu_dvfs_governor_default(struct kbase_device *kbdev, int utilization
 		platform->down_requirement = platform->table[platform->step].stay_count;
 
 		DVFS_ASSERT(platform->step < platform->table_size);
-	} else if ((platform->step > 0) && (utilization < platform->table[platform->step].min_threshold)) {
+	} else if ((platform->step > platform->min_dvfs_level) && (utilization < platform->table[platform->step].min_threshold)) {
 		DVFS_ASSERT(platform->step > 0);
 		platform->down_requirement--;
 		if (platform->down_requirement == 0) {
@@ -162,16 +162,16 @@ static int gpu_dvfs_governor_static(struct kbase_device *kbdev, int utilization)
 
 	if (count == G3D_GOVERNOR_STATIC_PERIOD) {
 		if (increase) {
-			if (platform->step < platform->table_size-1)
+			if (platform->step < platform->max_dvfs_level)
 				platform->step++;
 			if (((platform->max_lock > 0) && (platform->table[platform->step].clock == platform->max_lock))
-					|| (platform->step == platform->table_size-1))
+					|| (platform->step == platform->max_dvfs_level))
 				increase = false;
 		} else {
 			if (platform->step > 0)
 				platform->step--;
 			if (((platform->min_lock > 0) && (platform->table[platform->step].clock == platform->min_lock))
-					|| (platform->step == 0))
+					|| (platform->step == platform->min_dvfs_level))
 				increase = true;
 		}
 
@@ -197,8 +197,8 @@ static int gpu_dvfs_governor_booster(struct kbase_device *kbdev, int utilization
 	/* booster_threshold = current clock * set the percentage of utilization */
 	booster_threshold = platform->cur_clock * 50;
 
-	dvfs_table_lock = platform->table_size-1;
-	for (i = platform->table_size-1; i >= 0; i--)
+	dvfs_table_lock = platform->max_dvfs_level;
+	for (i = platform->max_dvfs_level; i >= platform->min_dvfs_level; i--)
 		if (platform->table[i].max_threshold == 100)
 			dvfs_table_lock = i;
 
@@ -208,12 +208,12 @@ static int gpu_dvfs_governor_booster(struct kbase_device *kbdev, int utilization
 		platform->down_requirement = platform->table[platform->step].stay_count;
 		GPU_LOG(DVFS_WARNING, "[G3D_booster] increase G3D level 2 step\n");
 		DVFS_ASSERT(platform->step < platform->table_size);
-	} else if ((platform->step < platform->table_size-1) &&
+	} else if ((platform->step < platform->max_dvfs_level) &&
 			(utilization > platform->table[platform->step].max_threshold)) {
 		platform->step++;
 		platform->down_requirement = platform->table[platform->step].stay_count;
 		DVFS_ASSERT(platform->step < platform->table_size);
-	} else if ((platform->step > 0) && (utilization < platform->table[platform->step].min_threshold)) {
+	} else if ((platform->step > platform->min_dvfs_level) && (utilization < platform->table[platform->step].min_threshold)) {
 		DVFS_ASSERT(platform->step > 0);
 		platform->down_requirement--;
 		if (platform->down_requirement == 0) {
@@ -238,10 +238,10 @@ static int gpu_dvfs_governor_interactive(struct kbase_device *kbdev, int utiliza
 	if (!platform)
 		return -ENODEV;
 
-	if ((platform->step < gpu_dvfs_get_level(platform, platform->max_lock))
+	if ((platform->step < platform->max_dvfs_level)
 			&& (utilization > platform->table[platform->step].max_threshold)) {
 		platform->interactive.highspeed_level = gpu_dvfs_get_level(platform, platform->interactive.highspeed_clock);
-		if ((platform->interactive.highspeed_level > 0) 
+		if ((platform->interactive.highspeed_level > platform->min_dvfs_level) 
 				&& (utilization > platform->interactive.highspeed_load)) {
 			if (platform->interactive.delay_count == platform->interactive.highspeed_delay) {
 				platform->step = platform->interactive.highspeed_level;
@@ -254,7 +254,7 @@ static int gpu_dvfs_governor_interactive(struct kbase_device *kbdev, int utiliza
 			platform->interactive.delay_count = 0;
 		}
 		platform->down_requirement = platform->table[platform->step].stay_count;
-	} else if ((platform->step > gpu_dvfs_get_level(platform, platform->min_lock))
+	} else if ((platform->step > platform->min_dvfs_level)
 			&& (utilization < platform->table[platform->step].min_threshold)) {
 		platform->interactive.delay_count = 0;
 		platform->down_requirement--;

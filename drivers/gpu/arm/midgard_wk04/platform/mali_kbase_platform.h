@@ -125,6 +125,8 @@ struct exynos_context {
 #endif /* CONFIG_CPU_THERMAL_IPA */
 	int max_lock;
 	int min_lock;
+	int max_dvfs_level;
+	int min_dvfs_level;
 	int user_max_lock[NUMBER_LOCK];
 	int user_min_lock[NUMBER_LOCK];
 	int target_lock_type;
