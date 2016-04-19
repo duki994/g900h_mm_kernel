@@ -48,7 +48,7 @@ static int mmap_is_legacy(void)
 }
 
 /*
- * Since get_random_int() returns the same value within a 1 jiffy window, we
+ * Since get_random_long() returns the same value within a 1 jiffy window, we
  * will almost always get the same randomisation for the stack and mmap
  * region. This will mean the relative distance between stack and mmap will be
  * the same.
@@ -60,7 +60,7 @@ static unsigned long mmap_rnd(void)
 	unsigned long rnd = 0;
 
 	if (current->flags & PF_RANDOMIZE)
-		rnd = (long)get_random_int() & (STACK_RND_MASK >> 1);
+		rnd = get_random_long() & (STACK_RND_MASK >> 1);
 
 	return rnd << (PAGE_SHIFT + 1);
 }
