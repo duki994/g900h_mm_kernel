@@ -322,6 +322,10 @@ extern struct cpu_tlb_fns cpu_tlb;
 #define tlb_op(f, regs, arg)	__tlb_op(f, "p15, 0, %0, " regs, arg)
 #define tlb_l2_op(f, regs, arg)	__tlb_op(f, "p15, 1, %0, " regs, arg)
 
+/*
+* Branch predictor maintenance is paired with full TLB invalidation, so
+* there is no need for any barriers here.
+*/
 static inline void local_flush_tlb_all(void)
 {
 	const int zero = 0;
@@ -335,10 +339,6 @@ static inline void local_flush_tlb_all(void)
 	tlb_op(TLB_V4_I_FULL | TLB_V6_I_FULL, "c8, c5, 0", zero);
 	tlb_op(TLB_V7_UIS_FULL, "c8, c3, 0", zero);
 
-	if (tlb_flag(TLB_BARRIER)) {
-		dsb();
-		isb();
-	}
 }
 
 static inline void local_flush_tlb_mm(struct mm_struct *mm)
