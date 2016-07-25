@@ -29,7 +29,7 @@ LANG=C
 KERNELDIR=$(readlink -f .);
 RAMDISK_TMP=ramdisk_tmp
 RAMDISK_DIR=ramdisk_source
-DEFCONFIG=exynos_user_defconfig
+DEFCONFIG=exynos5422-k3g_defconfig
 
 
 CLEANUP()
