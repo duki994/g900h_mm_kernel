@@ -1072,7 +1072,7 @@ config EXYNOS_RUN_QUEUE_STATS
 	 This option enalbes statistics collection on Run Queue. A daemon
          in user mode, called MPDecision will be using this data to decide
          on when to switch off/on the other cores.
-
+         
 config SEC_BAT_AUT
 	bool "Samsung TN Bat Automation Test Feature"
 	default n
@@ -1106,3 +1106,8 @@ config EXYNOS5433_ASV_NEON_WORKAROUND
 	help
 	  Increase ATL voltage
 
+config CHARGE_CONTROL
+	bool "Charge level interface"
+	default y
+	help
+	  Allows changing of AC, USB and WIRELESS charging currents

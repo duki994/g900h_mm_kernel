@@ -17,6 +17,10 @@
 #endif
 #include <linux/of_gpio.h>
 
+#ifdef CONFIG_CHARGE_CONTROL
+#include <linux/charge_control.h>
+#endif
+
 #define ENABLE 1
 #define DISABLE 0
 
@@ -28,6 +32,17 @@
 #define SIOP_WIRELESS_INPUT_LIMIT_CURRENT 620
 #define SIOP_WIRELESS_CHARGING_LIMIT_CURRENT 680
 #define SLOW_CHARGING_CURRENT_STANDARD 400
+
+#ifdef CONFIG_CHARGE_CONTROL
+int ac_chgcurr = ac_CHGCURR_DEFAULT;
+int usb_chgcurr = usb_CHGCURR_DEFAULT;
+int wireless_chgcurr = wireless_CHGCURR_DEFAULT;
+
+char chginfo[30] = "";
+int chgcurr_nom = 0;
+int chgcurr_cur = 0;
+int chgcurr_default_logic = 1;
+#endif
 
 struct max77804_charger_data {
 	struct max77804_dev	*max77804;
@@ -837,6 +852,9 @@ static int sec_chg_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_AVG:
 		val->intval = charger->charging_current;
+#ifdef CONFIG_CHARGE_CONTROL
+		chgcurr_cur = val->intval;
+#endif
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = max77804_get_input_current(charger);
@@ -983,6 +1001,63 @@ static int sec_chg_set_property(struct power_supply *psy,
 			}
 		}
 
+#ifdef CONFIG_CHARGE_CONTROL
+			chgcurr_default_logic = 1;
+			chgcurr_nom = 9999; /* we do not know the rate -> so use virtual rate */
+
+			switch(charger->cable_type)
+			{
+				case POWER_SUPPLY_TYPE_BATTERY:
+					chgcurr_nom = 0;
+					sprintf(chginfo, "No charger");
+					break;
+					
+				case POWER_SUPPLY_TYPE_MAINS:
+					sprintf(chginfo, "AC charger");
+					if (ac_chgcurr != 0)
+					{
+						chgcurr_default_logic = 0;
+						chgcurr_nom = ac_chgcurr;
+						set_charging_current = ac_chgcurr;
+						set_charging_current_max = ac_chgcurr;
+					}
+					break;
+
+				case POWER_SUPPLY_TYPE_USB:
+				case POWER_SUPPLY_TYPE_USB_DCP:
+				case POWER_SUPPLY_TYPE_USB_CDP:
+				case POWER_SUPPLY_TYPE_USB_ACA:
+				case POWER_SUPPLY_TYPE_CARDOCK:
+				case POWER_SUPPLY_TYPE_OTG:
+					sprintf(chginfo, "USB charger");
+					if (usb_chgcurr != 0)
+					{
+						chgcurr_default_logic = 0;
+						chgcurr_nom = usb_chgcurr;
+						set_charging_current = usb_chgcurr;
+						set_charging_current_max = usb_chgcurr;
+					}
+					break;
+
+				case POWER_SUPPLY_TYPE_WIRELESS:
+					sprintf(chginfo, "Wireless charger");
+					if (wireless_chgcurr != 0)
+					{
+						chgcurr_default_logic = 0;
+						chgcurr_nom = wireless_chgcurr;
+						set_charging_current = wireless_chgcurr;
+						set_charging_current_max = wireless_chgcurr;
+					}
+					break;
+
+				default:
+					sprintf(chginfo, "Unknown charger");
+					break;
+			}
+
+			printk(KERN_INFO "duki994: charge type: %s, default charging logic: %d, nominal mA: %d\n", chginfo, chgcurr_default_logic, chgcurr_nom);
+#endif
+
 		if (charger->pdata->full_check_type_2nd == SEC_BATTERY_FULLCHARGED_CHGPSY) {
 			union power_supply_propval chg_mode;
 			psy_do_property("battery", get, POWER_SUPPLY_PROP_CHARGE_NOW, chg_mode);
@@ -1048,6 +1123,10 @@ static int sec_chg_set_property(struct power_supply *psy,
 		break;
 #endif
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+#ifdef CONFIG_CHARGE_CONTROL
+		if (chgcurr_default_logic == 0)
+			break;
+#endif
 		charger->siop_level = val->intval;
 		if (charger->is_charging) {
 			/* decrease the charging current according to siop level */
