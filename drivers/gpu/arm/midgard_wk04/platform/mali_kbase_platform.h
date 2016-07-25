@@ -150,6 +150,15 @@ struct exynos_context {
 #if defined(SET_MINLOCK)
 	int custom_cpu_max_lock;
 #endif
+
+	struct {
+		int highspeed_clock;
+		int highspeed_load;
+		int highspeed_delay;
+		int highspeed_level;
+		int delay_count;
+	} interactive;
+
 };
 
 #ifdef CONFIG_CPU_THERMAL_IPA

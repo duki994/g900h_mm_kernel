@@ -749,6 +749,202 @@ static ssize_t set_governor(struct device *dev, struct device_attribute *attr, c
 	return count;
 }
 
+static ssize_t show_highspeed_clock(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct kbase_device *kbdev;
+	struct exynos_context *platform;
+
+	
+	ssize_t ret = 0;
+	unsigned long flags;
+	int highspeed_clock = -1;
+
+	kbdev = dev_get_drvdata(dev);
+	platform = (struct exynos_context *)kbdev->platform_context;
+
+	if (!platform)
+		return -ENODEV;
+
+	spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
+	highspeed_clock = platform->interactive.highspeed_clock;
+	spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
+
+	ret += snprintf(buf+ret, PAGE_SIZE-ret, "%d", highspeed_clock);
+
+	if (ret < PAGE_SIZE - 1) {
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "\n");
+	} else {
+		buf[PAGE_SIZE-2] = '\n';
+		buf[PAGE_SIZE-1] = '\0';
+		ret = PAGE_SIZE-1;
+	}
+
+	return ret;
+}
+
+static ssize_t set_highspeed_clock(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+
+	ssize_t ret = 0;
+	unsigned long flags;
+	int highspeed_clock = -1;
+	struct kbase_device *kbdev;
+	struct exynos_context *platform;
+
+	kbdev = dev_get_drvdata(dev);
+	platform = (struct exynos_context *)kbdev->platform_context;
+
+	if (!platform)
+		return -ENODEV;
+
+	ret = kstrtoint(buf, 0, &highspeed_clock);
+	if (ret) {
+		GPU_LOG(DVFS_WARNING, "%s: invalid value\n", __func__);
+		return -ENOENT;
+	}
+
+	ret = gpu_dvfs_handler_control(kbdev, GPU_HANDLER_DVFS_GET_LEVEL, highspeed_clock);
+	if ((ret < 0) || (ret > platform->table_size - 1)) {
+		GPU_LOG(DVFS_WARNING, "%s: invalid clock value (%d)\n", __func__, highspeed_clock);
+		return -ENOENT;
+	}
+
+	if (highspeed_clock > platform->min_lock)
+		highspeed_clock = platform->min_lock;
+
+	spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
+	platform->interactive.highspeed_clock = highspeed_clock;
+	spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
+
+	return count;
+}
+
+static ssize_t show_highspeed_load(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	unsigned long flags;
+	int highspeed_load = -1;
+	struct kbase_device *kbdev;
+	struct exynos_context *platform;
+
+	kbdev = dev_get_drvdata(dev);
+	platform = (struct exynos_context *)kbdev->platform_context;
+
+	if (!platform)
+		return -ENODEV;
+
+	spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
+	highspeed_load = platform->interactive.highspeed_load;
+	spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
+
+	ret += snprintf(buf+ret, PAGE_SIZE-ret, "%d", highspeed_load);
+
+	if (ret < PAGE_SIZE - 1) {
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "\n");
+	} else {
+		buf[PAGE_SIZE-2] = '\n';
+		buf[PAGE_SIZE-1] = '\0';
+		ret = PAGE_SIZE-1;
+	}
+
+	return ret;
+}
+
+static ssize_t set_highspeed_load(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	ssize_t ret = 0;
+	unsigned long flags;
+	int highspeed_load = -1;
+	struct kbase_device *kbdev;
+	struct exynos_context *platform;
+
+	kbdev = dev_get_drvdata(dev);
+	platform = (struct exynos_context *)kbdev->platform_context;
+
+	if (!platform)
+		return -ENODEV;
+
+	ret = kstrtoint(buf, 0, &highspeed_load);
+	if (ret) {
+		GPU_LOG(DVFS_WARNING, "%s: invalid value\n", __func__);
+		return -ENOENT;
+	}
+
+	if ((highspeed_load < 0) || (highspeed_load > 100)) {
+		GPU_LOG(DVFS_WARNING, "%s: invalid load value (%d)\n", __func__, highspeed_load);
+		return -ENOENT;
+	}
+
+	spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
+	platform->interactive.highspeed_load = highspeed_load;
+	spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
+
+	return count;
+}
+
+static ssize_t show_highspeed_delay(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	unsigned long flags;
+	int highspeed_delay = -1;
+	struct kbase_device *kbdev;
+	struct exynos_context *platform;
+
+	kbdev = dev_get_drvdata(dev);
+	platform = (struct exynos_context *)kbdev->platform_context;
+
+	if (!platform)
+		return -ENODEV;
+
+	spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
+	highspeed_delay = platform->interactive.highspeed_delay;
+	spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
+
+	ret += snprintf(buf+ret, PAGE_SIZE-ret, "%d", highspeed_delay);
+
+	if (ret < PAGE_SIZE - 1) {
+		ret += snprintf(buf+ret, PAGE_SIZE-ret, "\n");
+	} else {
+		buf[PAGE_SIZE-2] = '\n';
+		buf[PAGE_SIZE-1] = '\0';
+		ret = PAGE_SIZE-1;
+	}
+
+	return ret;
+}
+
+static ssize_t set_highspeed_delay(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	ssize_t ret = 0;
+	unsigned long flags;
+	int highspeed_delay = -1;
+	struct kbase_device *kbdev;
+	struct exynos_context *platform;
+
+	kbdev = dev_get_drvdata(dev);
+	platform = (struct exynos_context *)kbdev->platform_context;
+
+	if (!platform)
+		return -ENODEV;
+
+	ret = kstrtoint(buf, 0, &highspeed_delay);
+	if (ret) {
+		GPU_LOG(DVFS_WARNING, "%s: invalid value\n", __func__);
+		return -ENOENT;
+	}
+
+	if ((highspeed_delay < 0) || (highspeed_delay > 5)) {
+		GPU_LOG(DVFS_WARNING, "%s: invalid load value (%d)\n", __func__, highspeed_delay);
+		return -ENOENT;
+	}
+
+	spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
+	platform->interactive.highspeed_delay = highspeed_delay;
+	spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
+
+	return count;
+}
+
 static ssize_t show_wakeup_lock(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
@@ -1144,6 +1340,9 @@ DEVICE_ATTR(volt_table, S_IRUGO|S_IWUSR, show_volt_table, set_volt_table);
 DEVICE_ATTR(dvfs_table, S_IRUGO, show_dvfs_table, NULL);
 DEVICE_ATTR(power_state, S_IRUGO, show_power_state, NULL);
 DEVICE_ATTR(dvfs_governor, S_IRUGO|S_IWUSR, show_governor, set_governor);
+DEVICE_ATTR(highspeed_clock, S_IRUGO|S_IWUSR, show_highspeed_clock, set_highspeed_clock);
+DEVICE_ATTR(highspeed_load, S_IRUGO|S_IWUSR, show_highspeed_load, set_highspeed_load);
+DEVICE_ATTR(highspeed_delay, S_IRUGO|S_IWUSR, show_highspeed_delay, set_highspeed_delay);
 DEVICE_ATTR(wakeup_lock, S_IRUGO|S_IWUSR, show_wakeup_lock, set_wakeup_lock);
 DEVICE_ATTR(debug_level, S_IRUGO|S_IWUSR, show_debug_level, set_debug_level);
 DEVICE_ATTR(polling_speed, S_IRUGO|S_IWUSR, show_polling_speed, set_polling_speed);
@@ -1235,6 +1434,21 @@ int gpu_create_sysfs_file(struct device *dev)
 		goto out;
 	}
 
+	if (device_create_file(dev, &dev_attr_highspeed_clock)) {
+		GPU_LOG(DVFS_ERROR, "couldn't create sysfs file [highspeed_clock]\n");
+		goto out;
+	}
+
+	if (device_create_file(dev, &dev_attr_highspeed_load)) {
+		GPU_LOG(DVFS_ERROR, "couldn't create sysfs file [highspeed_load]\n");
+		goto out;
+	}
+
+	if (device_create_file(dev, &dev_attr_highspeed_delay)) {
+		GPU_LOG(DVFS_ERROR, "couldn't create sysfs file [highspeed_delay]\n");
+		goto out;
+	}
+
 	if (device_create_file(dev, &dev_attr_wakeup_lock)) {
 		GPU_LOG(DVFS_ERROR, "Couldn't create sysfs file [wakeup_lock]\n");
 		goto out;
@@ -1292,6 +1506,9 @@ void gpu_remove_sysfs_file(struct device *dev)
 	device_remove_file(dev, &dev_attr_dvfs_table);
 	device_remove_file(dev, &dev_attr_power_state);
 	device_remove_file(dev, &dev_attr_dvfs_governor);
+	device_remove_file(dev, &dev_attr_highspeed_clock);
+	device_remove_file(dev, &dev_attr_highspeed_load);
+	device_remove_file(dev, &dev_attr_highspeed_delay);
 	device_remove_file(dev, &dev_attr_wakeup_lock);
 	device_remove_file(dev, &dev_attr_debug_level);
 	device_remove_file(dev, &dev_attr_polling_speed);

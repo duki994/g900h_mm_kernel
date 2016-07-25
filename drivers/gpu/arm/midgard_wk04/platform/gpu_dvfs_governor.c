@@ -227,6 +227,48 @@ static int gpu_dvfs_governor_booster(struct kbase_device *kbdev, int utilization
 
 	return 0;
 }
+
+static int gpu_dvfs_governor_interactive(struct kbase_device *kbdev, int utilization)
+{
+
+	struct exynos_context *platform;
+
+	platform = (struct exynos_context *) kbdev->platform_context;
+
+	if (!platform)
+		return -ENODEV;
+
+	if ((platform->step > gpu_dvfs_get_level(platform, platform->max_lock))
+			&& (utilization > platform->table[platform->step].max_threshold)) {
+		if ((platform->interactive.highspeed_level > 0) 
+				&& (utilization > platform->interactive.highspeed_load)) {
+			if (platform->interactive.delay_count == platform->interactive.highspeed_delay) {
+				platform->step = platform->interactive.highspeed_level;
+				platform->interactive.delay_count = 0;
+			} else {
+				platform->interactive.delay_count++;
+			}
+		} else {
+			platform->step--;
+			platform->interactive.delay_count = 0;
+		}
+		platform->down_requirement = platform->table[platform->step].stay_count;
+	} else if ((platform->step < gpu_dvfs_get_level(platform, platform->min_lock))
+			&& (utilization < platform->table[platform->step].min_threshold)) {
+		platform->interactive.delay_count = 0;
+		platform->down_requirement--;
+		if (platform->down_requirement == 0) {
+			platform->step++;
+			platform->down_requirement = platform->table[platform->step].stay_count;
+		}
+	} else {
+		platform->interactive.delay_count = 0;
+		platform->down_requirement = platform->table[platform->step].stay_count;
+	}
+
+	return 0;
+}
+
 #endif /* CONFIG_MALI_T6XX_DVFS */
 
 static int gpu_dvfs_update_asv_table(struct exynos_context *platform, int governor_type)
@@ -293,6 +335,18 @@ int gpu_dvfs_governor_init(struct kbase_device *kbdev, int governor_type)
 		platform->table = gpu_dvfs_infotbl_default;
 		platform->table_size = GPU_DVFS_TABLE_SIZE(gpu_dvfs_infotbl_default);
 		platform->step = gpu_dvfs_get_level(platform, G3D_GOVERNOR_DEFAULT_CLOCK_BOOSTER);
+		break;
+	case G3D_DVFS_GOVERNOR_INTERACTIVE:
+		gpu_dvfs_get_next_freq = (GET_NEXT_FREQ)&gpu_dvfs_governor_interactive;
+		platform->table = gpu_dvfs_infotbl_default;
+		platform->table_size = GPU_DVFS_TABLE_SIZE(gpu_dvfs_infotbl_default);
+		platform->step = gpu_dvfs_get_level(platform, G3D_GOVERNOR_DEFAULT_CLOCK_INTERACTIVE);
+		/* initialize interactive specific governor tunables */
+		platform->interactive.highspeed_clock = 480;
+		platform->interactive.highspeed_load = 85;
+		platform->interactive.highspeed_delay = 0;
+		platform->interactive.highspeed_level = gpu_dvfs_get_level(platform, platform->interactive.highspeed_clock);
+		platform->interactive.delay_count = 0;
 		break;
 	default:
 		GPU_LOG(DVFS_WARNING, "[gpu_dvfs_governor_init] invalid governor type\n");
