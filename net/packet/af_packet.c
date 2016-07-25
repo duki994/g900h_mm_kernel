@@ -1135,7 +1135,7 @@ static unsigned int fanout_demux_hash(struct packet_fanout *f,
 				      struct sk_buff *skb,
 				      unsigned int num)
 {
-	return (((u64)skb->rxhash) * num) >> 32;
+	return (u32)(((u64) skb->rxhash * num) >> 32);
 }
 
 static unsigned int fanout_demux_lb(struct packet_fanout *f,
@@ -1222,6 +1222,9 @@ static int packet_rcv_fanout(struct sk_buff *skb, struct net_device *dev,
 	case PACKET_FANOUT_CPU:
 		idx = fanout_demux_cpu(f, skb, num);
 		break;
+        case PACKET_FANOUT_RND:
+                idx = fanout_demux_rnd(f, skb, num);
+                break;
 	case PACKET_FANOUT_ROLLOVER:
 		idx = fanout_demux_rollover(f, skb, 0, (unsigned int) -1, num);
 		break;
@@ -1291,6 +1294,7 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 	case PACKET_FANOUT_HASH:
 	case PACKET_FANOUT_LB:
 	case PACKET_FANOUT_CPU:
+	case PACKET_FANOUT_RND:
 		break;
 	default:
 		return -EINVAL;

@@ -488,6 +488,7 @@ extern atomic_t zswap_pool_pages;
 extern atomic_t zswap_stored_pages;
 #endif
 
+#ifndef MULTIPLE_OOM_KILLER
 static bool avoid_to_kill(uid_t uid)
 {
 	/* 
@@ -513,13 +514,12 @@ static bool protected_apps(char *comm)
 		return 1;
 	return 0;
 }
+#endif
 
 static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 {
 	struct task_struct *tsk;
 	struct task_struct *selected[MANAGED_PROCESS_TYPES] = {NULL};
-	const struct cred *pcred;
-	unsigned int uid = 0;
 	int rem = 0;
 	int ret = 0;
 	int tasksize;
@@ -533,7 +533,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int other_free = global_page_state(NR_FREE_PAGES);
 	int other_file = global_page_state(NR_FILE_PAGES) -
 						global_page_state(NR_SHMEM);
-	struct reclaim_state *reclaim_state = current->reclaim_state;
 	struct sysinfo si;
 
 #ifdef CONFIG_ZSWAP
@@ -732,6 +731,8 @@ static int android_oom_handler(struct notifier_block *nb,
 #else
 	int selected_tasksize = 0;
 	int selected_oom_score_adj;
+	const struct cred *pcred;
+	unsigned int uid;
 #endif
 #ifdef CONFIG_SEC_DEBUG_LMK_MEMINFO
 	static DEFINE_RATELIMIT_STATE(oom_rs, DEFAULT_RATELIMIT_INTERVAL/5, 1);

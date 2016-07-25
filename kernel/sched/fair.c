@@ -1648,7 +1648,10 @@ static unsigned int cap_range = 90000;
 void sched_update_cpu_efficiency_table(struct cpu_cluster_efficiency *ceff, 
 				       unsigned int cluster)
 {
-	int i, p, min, max, range, step;
+	int i, min, max, range, step;
+#ifdef DEBUG
+	int p;
+#endif
 	
 	cpu_efficiency_table[cluster] = *ceff;
 	

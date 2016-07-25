@@ -152,8 +152,6 @@ static unsigned int sp_power(struct arizona_control *ctl);
 static unsigned int sp_path(struct arizona_control *ctl);
 static unsigned int sp_volume(struct arizona_control *ctl);
 static void power_on_off_eq(unsigned int out_device, bool on_off);
-static void disable_eq(unsigned int out_device);
-static void enable_eq(unsigned int out_device);
 
 /* Sound controls */
 
@@ -361,10 +359,10 @@ static unsigned int eq_gain(struct arizona_control *ctl, unsigned int input_devi
 		return ctl->ctlval;
 
 	if (input_device == SPK_OUTPUT)
-		return _delta(ctl, ctl->value, 12);
+		return _pair(ctl, 22, _delta(ctl, ctl->value, 12));
 
 	if (input_device == HP_OUTPUT)
-		return _pair(ctl, 22, _delta(ctl, ctl->value, 12));
+		return _pair(ctl, 22, _delta(ctl, ctl->value, 16));
 	
 	return _pair(ctl, 22, _delta(ctl, ctl->value, 12));
 }
@@ -377,28 +375,6 @@ static unsigned int hp_power(struct arizona_control *ctl)
 	_ctl_set(&ctls[DRC1RENA], ctl->ctlval && ctls[DRC_HP].value);
 
 	return ctl->ctlval;
-}
-
-static void enable_eq(unsigned int out_device) 
-{
-	if (out_device == HP_OUTPUT) {
-		_ctl_set(&ctls[EQ1ENA], 1);
-		_ctl_set(&ctls[EQ2ENA], 1);	
-	} else if (out_device == SPK_OUTPUT) {
-		_ctl_set(&ctls[EQ3ENA], 1);
-		_ctl_set(&ctls[EQ4ENA], 1);
-	}
-}
-
-static void disable_eq(unsigned int out_device) 
-{
-	if (out_device == HP_OUTPUT) {
-		_ctl_set(&ctls[EQ1ENA], 0);
-		_ctl_set(&ctls[EQ2ENA], 0);	
-	} else if (out_device == SPK_OUTPUT) {
-		_ctl_set(&ctls[EQ3ENA], 0);
-		_ctl_set(&ctls[EQ4ENA], 0);
-	}
 }
 
 static void power_on_off_eq(unsigned int out_device, bool on_off) 
