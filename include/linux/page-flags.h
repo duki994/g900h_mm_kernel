@@ -109,10 +109,6 @@ enum pageflags {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	PG_compound_lock,
 #endif
-#ifdef CONFIG_SCFS_LOWER_PAGECACHE_INVALIDATION
-	PG_scfslower,
-	PG_nocache,
-#endif
 	PG_readahead, /* page in a readahead window */
 #ifdef CONFIG_SCFS_LOWER_PAGECACHE_INVALIDATION
 	PG_scfslower,

@@ -31,6 +31,7 @@
 #include <linux/memcontrol.h>
 #include <linux/gfp.h>
 #include <linux/hugetlb.h>
+#include <linux/huge_mm.h>
 #include <linux/uio.h>
 
 #include "internal.h"
@@ -209,7 +210,7 @@ bool __get_page_tail(struct page *page)
 		goto out;
 	}
 
-	page_head = compound_trans_head(page);
+	page_head = compound_head(page);
 	if (likely(page != page_head && get_page_unless_zero(page_head))) {
 
 		/* Ref to put_compound_page() comment. */

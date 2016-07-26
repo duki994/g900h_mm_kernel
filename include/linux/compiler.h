@@ -300,7 +300,7 @@ void ftrace_likely_update(struct ftrace_branch_data *f, int val, int expect);
 
 /* Is this type a native word size -- useful for atomic operations */
 #ifndef __native_word
-# define __native_word(t) (sizeof(t) == sizeof(int) || sizeof(t) == sizeof(long))
+# define __native_word(t) (sizeof(t) == sizeof(char) || sizeof(t) == sizeof(short) || sizeof(t) == sizeof(int) || sizeof(t) == sizeof(long))
 #endif
 
 /* Compile time object size, -1 for unknown */
@@ -342,9 +342,9 @@ void ftrace_likely_update(struct ftrace_branch_data *f, int val, int expect);
 #define compiletime_assert(condition, msg) \
 	_compiletime_assert(condition, msg, __compiletime_assert_, __LINE__)
 
-#define compiletime_assert_atomic_type(t)				\
-	compiletime_assert(__native_word(t),				\
-		"Need native word sized stores/loads for atomicity.")
+#define compiletime_assert_atomic_type(t)                               \
+         compiletime_assert(__native_word(t),                            \
+                 "Need native word sized stores/loads for atomicity.")
 
 /*
  * Prevent the compiler from merging or refetching accesses.  The compiler
