@@ -208,9 +208,9 @@ static int exynos5422_bus_table_CA7[CPUFREQ_LEVEL_END_CA7] = {
 	275000, /* 700 MHz */
 	133000, /* 600 MHz */
 	133000, /* 500 MHz */
-	0,  /* 400 MHz */
-	0,  /* 300 MHz */
-	0,  /* 200 MHz */
+	133000,  /* 400 MHz */
+	133000,  /* 300 MHz */
+	133000,  /* 200 MHz */
 
 };
 
@@ -412,7 +412,7 @@ static void __init set_volt_table_CA7(void)
 #else
 	max_support_idx_CA7 = L3;
 #endif
-	min_support_idx_CA7 = L11;
+	min_support_idx_CA7 = L13; /* 300MHz */
 }
 
 static bool exynos5422_is_alive_CA7(void)
