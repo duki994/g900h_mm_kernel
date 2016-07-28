@@ -137,6 +137,17 @@ BUILD_NOW()
 		cd ../READY
 		zip -r Kernel-g900h.zip * >/dev/null
 		mv Kernel-g900h.zip ../../RELEASE/
+
+
+		# Add proper timestamps to default.prop in ramdisk
+
+		DATE=$(date)
+		DATEUTC=$(date +%s)
+
+		sed -i "s/ro.bootimage.build.date=.*/ro.bootimage.build.date=${DATE}/g" ../../"$RAMDISK_DIR"/default.prop
+		sed -i "s/ro.bootimage.build.date.utc=.*/ro.bootimage.build.date.utc=${DATEUTC}/g" ../../"$RAMDISK_DIR"/default.prop
+
+		echo "Build done"
 	else
 		# with red-color
 		echo -e "\e[1;31mKernel STUCK in BUILD! no zImage exist\e[m"
