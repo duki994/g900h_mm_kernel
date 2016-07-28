@@ -562,7 +562,7 @@ static void __init set_volt_table_CA15(void)
 	max_support_idx_CA15 = L5;
 #endif
 #endif
-	min_support_idx_CA15 = L19; /* 500MHz */
+	min_support_idx_CA15 = L16; /* 800MHz */
 }
 
 static bool exynos5422_is_alive_CA15(void)
