@@ -9,7 +9,9 @@
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
- *
+ * 
+ * @Modified: July 2016, by Dusan K. <https://github.com/duki994>
+ * @Reason: G900H HP_MEDIA_VOL hardcoding fixed
  */
 
 #include <linux/sysfs.h>
@@ -23,7 +25,7 @@
 #endif
 
 #define NOT_INIT		123456
-#define DEF_HP_MEDIA_VOL	113
+#define DEF_HP_MEDIA_VOL	114 /* it's 114 hardcoded in default.conf */
 
 static struct snd_soc_codec *codec = NULL;
 static int ignore_next = 0;
