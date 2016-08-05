@@ -11,8 +11,9 @@
  * only version 2 as published by the Free Software Foundation.
  * 
  * @Modified	: by Dusan K. <https://github.com/duki994>
- * @Reason	: July 2016 - HP_MEDIA_VOL adjusted for SM-G900H
+ * @Reason	: July 2016   - HP_MEDIA_VOL adjusted for SM-G900H
  * 		: August 2016 - Main speaker gain control for SM-G900H exposed
+ *		: August 2016 - Removed not needed speaker mixer code
  */
 
 #include <linux/sysfs.h>
@@ -121,7 +122,6 @@ static unsigned int __hp_volume(struct arizona_control *ctl)
 }
 
 static unsigned int hp_callback(struct arizona_control *ctl);
-static unsigned int sp_power(struct arizona_control *ctl);
 static unsigned int eq_gain(struct arizona_control *ctl);
 static unsigned int eq_gains_all(struct arizona_control *ctl);
 
@@ -131,12 +131,12 @@ enum sound_control {
 	HPLDVOL = 0, HPRDVOL, HPLIVOL, HPRIVOL, EPVOL, SPKVOL,
 	EQ_HP, EQ_HP_CH, HP_MONO, 
 	EQ1ENA, EQ2ENA, EQ3ENA, EQ4ENA,
-	POUT1L, POUT4L,
+	POUT1L,
 	
 #define ME(s)	s, s##VOL
 	ME(EQ1MIX1), ME(EQ1MIX2), ME(EQ2MIX1), ME(EQ2MIX2), ME(EQ3MIX1), ME(EQ4MIX1),
 	ME(HPOUT1L1), ME(HPOUT1L2), ME(HPOUT1R1), ME(HPOUT1R2),
-	ME(AIF4TX1), ME(AIF4TX2), SPOUT1L1, SPOUT1L2,
+	ME(AIF4TX1), ME(AIF4TX2),
 	
 	EQAFREQS, EQBFREQS,
 	EQHPL1G, EQHPL2G, EQHPL3G, EQHPL4G, EQHPL5G, EQHPL6G, EQHPL7G, EQHPL8G,
@@ -186,8 +186,6 @@ static struct arizona_control ctls[] = {
 
 	_ctl("out1l_enable", CTL_MONITOR, ARIZONA_OUTPUT_ENABLES_1,
 		ARIZONA_OUT1L_ENA_MASK, ARIZONA_OUT1L_ENA_SHIFT, hp_callback),
-	_ctl("out4l_enable", CTL_MONITOR, ARIZONA_OUTPUT_ENABLES_1,
-		ARIZONA_OUT4L_ENA_MASK, ARIZONA_OUT4L_ENA_SHIFT, sp_power),
 
 	/* Mixers */
 
@@ -214,11 +212,6 @@ static struct arizona_control ctls[] = {
 	
 	MIXER("aif4tx1", AIF4TX1MIX, 1),
 	MIXER("aif4tx2", AIF4TX1MIX, 1),
-
-	_ctl("spout1l_input1_source",
-		CTL_HIDDEN, ARIZONA_OUT4LMIX_INPUT_1_SOURCE, 0xff, 0, __simple),
-	_ctl("spout1l_input2_source",
-		CTL_INERT, ARIZONA_OUT4LMIX_INPUT_2_SOURCE, 0xff, 0, __simple),
 
 	/* EQ Configurables */
 
@@ -340,15 +333,6 @@ static unsigned int hp_callback(struct arizona_control *ctl)
 	_ctl_set(&ctls[EQ4ENA], power && eq && !mono);
 
 	return ctl->ctlval;
-}
-
-static unsigned int sp_power(struct arizona_control *ctl)
-{
-	_ctl_set(&ctls[SPOUT1L1], 32);
-	_ctl_set(&ctls[SPOUT1L2], 33);
-	_ctl_set(&ctls[SPKVOL], ctls[SPKVOL].value);
-
-	return (ctl->ctlval && !ctls[POUT1L].ctlval);
 }
 
 /* Interface */
