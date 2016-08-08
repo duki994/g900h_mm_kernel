@@ -2024,6 +2024,7 @@ static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 	struct cpufreq_interactive_tunables *tunables;
 	struct sched_param param = { .sched_priority = MAX_RT_PRIO-1 };
 	char speedchange_task_name[TASK_NAME_LEN];
+	unsigned long flags;
 
 	if (have_governor_per_policy())
 		tunables = policy->governor_data;
