@@ -33,6 +33,7 @@
 #include <linux/slab.h>
 #include <linux/kernel_stat.h>
 #include <linux/pm_qos.h>
+#include <linux/powersuspend.h>
 #include <asm/cputime.h>
 #ifdef CONFIG_ANDROID
 #include <asm/uaccess.h>
@@ -630,27 +631,29 @@ static void cpufreq_interactive_timer(unsigned long data)
 	if (WARN_ON_ONCE(!delta_time))
 		goto rearm;
 #ifdef CONFIG_MODE_AUTO_CHANGE
-	spin_lock_irqsave(&tunables->mode_lock, flags);
-	if (tunables->enforced_mode)
-		new_mode = tunables->enforced_mode;
-	else
-		new_mode = check_mode(data, tunables->mode, now);
-
-	if (new_mode != tunables->mode) {
-		tunables->mode = new_mode;
-		if (new_mode & MULTI_MODE || new_mode & SINGLE_MODE)
-			enter_mode(tunables);
+	if (!power_suspended) {
+		spin_lock_irqsave(&tunables->mode_lock, flags);
+		if (tunables->enforced_mode)
+			new_mode = tunables->enforced_mode;
 		else
-			exit_mode(tunables);
+			new_mode = check_mode(data, tunables->mode, now);
+
+		if (new_mode != tunables->mode) {
+			tunables->mode = new_mode;
+			if (new_mode & MULTI_MODE || new_mode & SINGLE_MODE)
+				enter_mode(tunables);
+			else
+				exit_mode(tunables);
+		}
+		spin_unlock_irqrestore(&tunables->mode_lock, flags);
 	}
-	spin_unlock_irqrestore(&tunables->mode_lock, flags);
 #endif
 	do_div(cputime_speedadj, delta_time);
 	loadadjfreq = (unsigned int)cputime_speedadj * 100;
 	cpu_load = loadadjfreq / pcpu->policy->cur;
 	boosted = tunables->boost_val || now < tunables->boostpulse_endtime;
 
-	if (cpu_load >= tunables->go_hispeed_load || boosted) {
+	if (cpu_load >= tunables->go_hispeed_load && !power_suspended || boosted) {
 		if (pcpu->policy->cur < tunables->hispeed_freq) {
 			new_freq = tunables->hispeed_freq;
 		} else {
