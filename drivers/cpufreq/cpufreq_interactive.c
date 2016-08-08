@@ -59,6 +59,7 @@ struct cpufreq_interactive_cpuinfo {
 	u64 cputime_speedadj_timestamp;
 	struct cpufreq_policy *policy;
 	struct cpufreq_frequency_table *freq_table;
+	spinlock_t target_freq_lock; /* protects target freq */
 	unsigned int target_freq;
 	unsigned int floor_freq;
 	u64 floor_validate_time;
@@ -933,12 +934,12 @@ static void cpufreq_interactive_boost(const struct cpufreq_policy *policy)
 {
 	int i;
 	int anyboost = 0;
-	unsigned long flags;
+	unsigned long flags[2];
 	struct cpufreq_interactive_cpuinfo *pcpu;
 	struct cpufreq_interactive_tunables *tunables;
 	struct cpumask boost_mask;
 
-	spin_lock_irqsave(&speedchange_cpumask_lock, flags);
+	spin_lock_irqsave(&speedchange_cpumask_lock, flags[0]);
 
 	if (have_governor_per_policy())
 		cpumask_copy(&boost_mask, policy->cpus);
@@ -950,10 +951,11 @@ static void cpufreq_interactive_boost(const struct cpufreq_policy *policy)
 		tunables = pcpu->policy->governor_data;
 
 		if (!tunables->speedchange_task) {
-			spin_unlock_irqrestore(&speedchange_cpumask_lock, flags);
+			spin_unlock_irqrestore(&speedchange_cpumask_lock, flags[0]);
 			return;
 		}
 
+		spin_lock_irqsave(&pcpu->target_freq_lock, flags[1]);
 		if (pcpu->target_freq < tunables->hispeed_freq) {
 			pcpu->target_freq = tunables->hispeed_freq;
 			cpumask_set_cpu(i, &speedchange_cpumask);
@@ -969,9 +971,10 @@ static void cpufreq_interactive_boost(const struct cpufreq_policy *policy)
 
 		pcpu->floor_freq = tunables->hispeed_freq;
 		pcpu->floor_validate_time = ktime_to_us(ktime_get());
+		spin_unlock_irqrestore(&pcpu->target_freq_lock, flags[1]);
 	}
 
-	spin_unlock_irqrestore(&speedchange_cpumask_lock, flags);
+	spin_unlock_irqrestore(&speedchange_cpumask_lock, flags[0]);
 
 	if (anyboost && tunables->speedchange_task)
 		wake_up_process(tunables->speedchange_task);
@@ -2224,10 +2227,13 @@ static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 			}
 
 			/* update target_freq firstly */
+			spin_lock_irqsave(&pcpu->target_freq_lock, flags);
 			if (policy->max < pcpu->target_freq)
 				pcpu->target_freq = policy->max;
 			else if (policy->min > pcpu->target_freq)
 				pcpu->target_freq = policy->min;
+
+			spin_unlock_irqrestore(&pcpu->target_freq_lock, flags);
 
 			/* Reschedule timer.
 			 * Delete the timers, else the timer callback may
@@ -2488,6 +2494,7 @@ static int __init cpufreq_interactive_init(void)
 		init_timer(&pcpu->cpu_slack_timer);
 		pcpu->cpu_slack_timer.function = cpufreq_interactive_nop_timer;
 		spin_lock_init(&pcpu->load_lock);
+		spin_lock_init(&pcpu->target_freq_lock);
 		init_rwsem(&pcpu->enable_sem);
 	}
 
