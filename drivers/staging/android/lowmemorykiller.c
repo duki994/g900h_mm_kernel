@@ -78,26 +78,22 @@ static short lowmem_adj[6] = {
 	1,
 	6,
 	12,
-	13,
-	15,
 };
-static int lowmem_adj_size = 6;
+static int lowmem_adj_size = 4;
 static int lowmem_minfree[6] = {
-	 4 * 1024,	/* Foreground App: 	16 MB	*/
-	 8 * 1024,	/* Visible App: 	32 MB	*/
-	16 * 1024,	/* Secondary Server: 	65 MB	*/
-	28 * 1024,	/* Hidden App: 		114 MB	*/
-	45 * 1024,	/* Content Provider: 	184 MB	*/
-	50 * 1024,	/* Empty App: 		204 MB	*/
+	3 * 512,	/* 6MB */
+	2 * 1024,	/* 8MB */
+	4 * 1024,	/* 16MB */
+	16 * 1024,	/* 64MB */
 };
-static int lowmem_minfree_size = 6;
+static int lowmem_minfree_size = 4;
 static uint32_t lowmem_lmkcount = 0;
-static int lmk_fast_run = 1;
+static int lmk_fast_run = 0;
 
 static unsigned long lowmem_deathpending_timeout;
 
 #ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_DO_NOT_KILL_PROCESS
-#define MAX_NOT_KILLABLE_PROCESSES	25	/* Max number of not killable processes */
+#define MAX_NOT_KILLABLE_PROCESSES	10	/* Max number of not killable processes */
 #define MANAGED_PROCESS_TYPES		3	/* Numer of managed process types (lowmem_process_type) */
 
 /*
@@ -581,21 +577,24 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		}
 	}
 
-	ret = adjust_minadj(&min_score_adj);
-	lowmem_print(3, "lowmem_shrink %lu, %x, ofree %d %d, ma %hd\n",
-				sc->nr_to_scan, sc->gfp_mask, other_free,
-				other_file, min_score_adj);
+	if (sc->nr_to_scan > 0) {
+		ret = adjust_minadj(&min_score_adj);
+		lowmem_print(3, "lowmem_shrink %lu, %x, ofree %d %d, ma %hd\n",
+					sc->nr_to_scan, sc->gfp_mask, other_free,
+					other_file, min_score_adj);
+	}
 
 	rem = global_page_state(NR_ACTIVE_ANON) +
 		global_page_state(NR_ACTIVE_FILE) +
 		global_page_state(NR_INACTIVE_ANON) +
 		global_page_state(NR_INACTIVE_FILE);
-	if (min_score_adj == OOM_SCORE_ADJ_MAX + 1) {
+	if (sc->nr_to_scan <= 0 || min_score_adj == OOM_SCORE_ADJ_MAX + 1) {
 		lowmem_print(5, "lowmem_shrink %lu, %x, return %lu\n",
 			     sc->nr_to_scan, sc->gfp_mask, rem);
 
 
-		if ((min_score_adj == OOM_SCORE_ADJ_MAX + 1))
+		if ((min_score_adj == OOM_SCORE_ADJ_MAX + 1) &&
+			(sc->nr_to_scan > 0))
 			trace_almk_shrink(0, ret, other_free, other_file, 0);
 
 		return 0;
@@ -780,7 +779,13 @@ static int android_oom_handler(struct notifier_block *nb,
 #endif
 
 	read_lock(&tasklist_lock);
+#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+	for (tsk = pick_first_task();
+		tsk != pick_last_task() && tsk != NULL;
+		tsk = pick_next_from_adj_tree(tsk)) {
+#else
 	for_each_process(tsk) {
+#endif
 		struct task_struct *p;
 		int oom_score_adj;
 #ifdef MULTIPLE_OOM_KILLER
