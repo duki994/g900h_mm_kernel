@@ -37,14 +37,14 @@
 #include <linux/mm.h>
 #include <linux/oom.h>
 #include <linux/sched.h>
-#include <linux/swap.h>
 #include <linux/rcupdate.h>
 #include <linux/notifier.h>
+#include <linux/mutex.h>
 #include <linux/delay.h>
-#ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_DO_NOT_KILL_PROCESS
-#include <linux/string.h>
-#endif
-
+#include <linux/swap.h>
+#include <linux/fs.h>
+#include <linux/cpuset.h>
+#include <linux/show_mem_notifier.h>
 #include <linux/vmpressure.h>
 
 #define CREATE_TRACE_POINTS
@@ -56,21 +56,12 @@
 #define _ZONE ZONE_NORMAL
 #endif
 
-#ifdef CONFIG_SEC_DEBUG_LMK_COUNT_INFO
-#define OOM_COUNT_READ
+#ifdef CONFIG_PROCESS_RECLAIM
+#define PROCESS_RECLAIM_ENABLE_LOG
+#include <linux/hrtimer.h>
 #endif
 
-#ifdef CONFIG_SEC_OOM_KILLER
-#define MULTIPLE_OOM_KILLER
-#endif
-
-#ifdef OOM_COUNT_READ
-static uint32_t oom_count = 0;
-#endif
-
-#ifdef MULTIPLE_OOM_KILLER
-#define OOM_DEPTH 7
-#endif
+static uint32_t lmk_count = 0;
 
 static uint32_t lowmem_debug_level = 1;
 static short lowmem_adj[6] = {
@@ -87,79 +78,18 @@ static int lowmem_minfree[6] = {
 	16 * 1024,	/* 64MB */
 };
 static int lowmem_minfree_size = 4;
-static uint32_t lowmem_lmkcount = 0;
-static int lmk_fast_run = 0;
+
+// lowmem_nul is used to trick userspace to actually write nothing
+static int lowmem_nul[6] = {
+	0, 0, 0, 0,
+};
+static int lowmem_nul_size = 4;
+
+static int lmk_fast_run = 1;
 
 static unsigned long lowmem_deathpending_timeout;
-
-#ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_DO_NOT_KILL_PROCESS
-#define MAX_NOT_KILLABLE_PROCESSES	10	/* Max number of not killable processes */
-#define MANAGED_PROCESS_TYPES		3	/* Numer of managed process types (lowmem_process_type) */
-
-/*
- * Enumerator for the managed process types
- */
-enum lowmem_process_type {
-	KILLABLE_PROCESS,
-	DO_NOT_KILL_PROCESS,
-	DO_NOT_KILL_SYSTEM_PROCESS
-};
-
-/*
- * Data struct for the management of not killable processes
- */
-struct donotkill {
-	uint enabled;
-	char *names[MAX_NOT_KILLABLE_PROCESSES];
-	int names_count;
-};
-
-static struct donotkill donotkill_proc;		/* User processes to preserve from killing */
-static struct donotkill donotkill_sysproc;	/* System processes to preserve from killing */
-
-/*
- * Checks if a process name is inside a list of processes to be preserved from killing
- */
-static bool is_in_donotkill_list(char *proc_name, struct donotkill *donotkill_proc)
-{
-	int i = 0;
-
-	/* If the do not kill feature is enabled and the process names to be preserved
-	 * is not empty, then check if the passed process name is contained inside it */
-	if (donotkill_proc->enabled && donotkill_proc->names_count > 0) {
-		for (i = 0; i < donotkill_proc->names_count; i++) {
-			if (strstr(donotkill_proc->names[i], proc_name) != NULL)
-				return true; /* The process must be preserved from killing */
-		}
-	}
-
-	return false; /* The process is not contained inside the process names list */
-}
-
-/*
- * Checks if a process name is inside a list of user processes to be preserved from killing
- */
-static bool is_in_donotkill_proc_list(char *proc_name)
-{
-	return is_in_donotkill_list(proc_name, &donotkill_proc);
-}
-
-/*
- * Checks if a process name is inside a list of system processes to be preserved from killing
- */
-static bool is_in_donotkill_sysproc_list(char *proc_name)
-{
-	return is_in_donotkill_list(proc_name, &donotkill_sysproc);
-}
-#else
-#define MANAGED_PROCESS_TYPES		1	/* Numer of managed process types (lowmem_process_type) */
-
-/*
- * Enumerator for the managed process types
- */
-enum lowmem_process_type {
-	KILLABLE_PROCESS
-};
+#ifdef CONFIG_PROCESS_RECLAIM
+extern ssize_t reclaim_walk_mm(struct task_struct *task, char *type_buf);
 #endif
 
 #define lowmem_print(level, x...)			\
@@ -167,45 +97,12 @@ enum lowmem_process_type {
 		if (lowmem_debug_level >= (level))	\
 			pr_info(x);			\
 	} while (0)
-#if defined(CONFIG_SEC_DEBUG_LMK_MEMINFO)
-static void dump_tasks_info(void)
-{
-	struct task_struct *p;
-	struct task_struct *task;
-
-	pr_info("[ pid ]   uid	tgid total_vm	   rss cpu oom_adj oom_score_adj name\n");
-	for_each_process(p) {
-		/* check unkillable tasks */
-		if (is_global_init(p))
-			continue;
-		if (p->flags & PF_KTHREAD)
-			continue;
-
-		task = find_lock_task_mm(p);
-		if (!task) {
-			/*
-			* This is a kthread or all of p's threads have already
-			* detached their mm's.	There's no need to report
-			* them; they can't be oom killed anyway.
-			*/
-			continue;
-		}
-
-		pr_info("[%5d] %5d %5d %8lu %8lu %3u	 %3d	     %5d %s\n",
-		task->pid, task_uid(task), task->tgid,
-		task->mm->total_vm, get_mm_rss(task->mm),
-		task_cpu(task), task->signal->oom_adj,
-		task->signal->oom_score_adj, task->comm);
-		task_unlock(task);
-	}
-}
-#endif
 
 static atomic_t shift_adj = ATOMIC_INIT(0);
 static short adj_max_shift = 353;
 
 /* User knob to enable/disable adaptive lmk feature */
-static int enable_adaptive_lmk = 0;
+static int enable_adaptive_lmk = 1;
 module_param_named(enable_adaptive_lmk, enable_adaptive_lmk, int,
 	S_IRUGO | S_IWUSR);
 
@@ -216,7 +113,7 @@ module_param_named(enable_adaptive_lmk, enable_adaptive_lmk, int,
  * 90-94. Usually this is a pseudo minfree value, higher than the
  * highest configured value in minfree array.
  */
-static int vmpressure_file_min = 76800; /* (75 * 1024) * 4 = 307 MB */
+static int vmpressure_file_min;
 module_param_named(vmpressure_file_min, vmpressure_file_min, int,
 	S_IRUGO | S_IWUSR);
 
@@ -249,12 +146,12 @@ int adjust_minadj(short *min_score_adj)
 static int lmk_vmpressure_notifier(struct notifier_block *nb,
 			unsigned long action, void *data)
 {
-	int other_free = 0, other_file = 0;
+	int other_free, other_file;
 	unsigned long pressure = action;
 	int array_size = ARRAY_SIZE(lowmem_adj);
 
-	if (!enable_adaptive_lmk) 
- 		return 0;
+	if (!enable_adaptive_lmk)
+		return 0;
 
 	if (pressure >= 95) {
 		other_file = global_page_state(NR_FILE_PAGES) -
@@ -291,7 +188,7 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 		 */
 		trace_almk_vmpressure(pressure, other_free, other_file);
 		atomic_set(&shift_adj, 0);
- 	}
+	}
 
 	return 0;
 }
@@ -315,6 +212,26 @@ static int test_task_flag(struct task_struct *p, int flag)
 
 	return 0;
 }
+
+#ifdef CONFIG_PROCESS_RECLAIM
+static int test_task_exit_state(struct task_struct *p, long flag)
+{
+	struct task_struct *t = p;
+
+	do {
+		task_lock(t);
+		if (t->exit_state == flag) {
+			task_unlock(t);
+			return 1;
+		}
+		task_unlock(t);
+	} while_each_thread(p, t);
+
+	return 0;
+}
+#endif
+
+static DEFINE_MUTEX(scan_mutex);
 
 int can_use_cma_pages(gfp_t gfp_mask)
 {
@@ -352,7 +269,7 @@ void tune_lmk_zone_param(struct zonelist *zonelist, int classzone_idx,
 	for_each_zone_zonelist(zone, zoneref, zonelist, MAX_NR_ZONES) {
 		zone_idx = zonelist_zone_idx(zoneref);
 		if (zone_idx == ZONE_MOVABLE) {
-			if (!use_cma_pages)
+			if (!use_cma_pages && other_free)
 				*other_free -=
 				    zone_page_state(zone, NR_FREE_CMA_PAGES);
 			continue;
@@ -365,9 +282,10 @@ void tune_lmk_zone_param(struct zonelist *zonelist, int classzone_idx,
 			if (other_file != NULL)
 				*other_file -= zone_page_state(zone,
 							       NR_FILE_PAGES)
-					      - zone_page_state(zone, NR_SHMEM);
+					- zone_page_state(zone, NR_SHMEM);
 		} else if (zone_idx < classzone_idx) {
-			if (zone_watermark_ok(zone, 0, 0, classzone_idx, 0)) {
+			if (zone_watermark_ok(zone, 0, 0, classzone_idx, 0) &&
+			    other_free) {
 				if (!use_cma_pages) {
 					*other_free -= min(
 					  zone->lowmem_reserve[classzone_idx] +
@@ -380,8 +298,9 @@ void tune_lmk_zone_param(struct zonelist *zonelist, int classzone_idx,
 					  zone->lowmem_reserve[classzone_idx];
 				}
 			} else {
-				*other_free -=
-					   zone_page_state(zone, NR_FREE_PAGES);
+				if (other_free)
+					*other_free -=
+					  zone_page_state(zone, NR_FREE_PAGES);
 			}
 		}
 	}
@@ -414,12 +333,6 @@ void adjust_gfp_mask(gfp_t *gfp_mask)
 void adjust_gfp_mask(gfp_t *unused)
 {
 }
-#endif
-
-#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
-static struct task_struct *pick_next_from_adj_tree(struct task_struct *task);
-static struct task_struct *pick_first_task(void);
-static struct task_struct *pick_last_task(void);
 #endif
 
 void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
@@ -488,37 +401,10 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
 	}
 }
 
-#if defined(CONFIG_ZSWAP)
-extern atomic_t zswap_pool_pages;
-extern atomic_t zswap_stored_pages;
-#endif
-
-#ifndef MULTIPLE_OOM_KILLER
-static bool avoid_to_kill(uid_t uid)
-{
-	/* 
-	 * uid info
-	 * uid == 0 > root
-	 * uid == 1001 > radio
-	 * uid == 1002 > bluetooth
-	 * uid == 1010 > wifi
-	 * uid == 1014 > dhcp
-	 */
-	if (uid == 0 || uid == 1001 || uid == 1002 || uid == 1010 ||
-			uid == 1014)
-		return 1;
-	return 0;
-}
-
-static bool protected_apps(char *comm)
-{
-	if (strcmp(comm, "d.process.acore") == 0 ||
-			strcmp(comm, "ndroid.systemui") == 0 ||
-			strcmp(comm, "ndroid.contacts") == 0 ||
-			strcmp(comm, "system:ui") == 0)
-		return 1;
-	return 0;
-}
+#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+static struct task_struct *pick_next_from_adj_tree(struct task_struct *task);
+static struct task_struct *pick_first_task(void);
+static struct task_struct *pick_last_task(void);
 #endif
 
 static unsigned long lowmem_count(struct shrinker *s,
@@ -533,35 +419,43 @@ static unsigned long lowmem_count(struct shrinker *s,
 static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 {
 	struct task_struct *tsk;
-	struct task_struct *selected[MANAGED_PROCESS_TYPES] = {NULL};
-	unsigned int uid = 0;
+	struct task_struct *selected = NULL;
 	unsigned long rem = 0;
-	unsigned long ret = 0;
-
 	int tasksize;
 	int i;
+	int ret = 0;
 	short min_score_adj = OOM_SCORE_ADJ_MAX + 1;
 	int minfree = 0;
-	enum lowmem_process_type proc_type = KILLABLE_PROCESS;
-	int selected_tasksize[MANAGED_PROCESS_TYPES] = {0};
-	int selected_oom_score_adj[MANAGED_PROCESS_TYPES];
+	int selected_tasksize = 0;
+	short selected_oom_score_adj;
 	int array_size = ARRAY_SIZE(lowmem_adj);
-	int other_free = global_page_state(NR_FREE_PAGES);
-	int other_file = global_page_state(NR_FILE_PAGES) -
-						global_page_state(NR_SHMEM);
-	struct sysinfo si;
+	int other_free;
+	int other_file;
+	unsigned long nr_to_scan = sc->nr_to_scan;
 
-#ifdef CONFIG_ZSWAP
-	/* to prevent other_file underflow and then be negative */
-	if (other_file > total_swapcache_pages())
-		other_file -= total_swapcache_pages();
+	rcu_read_lock();
+	tsk = current->group_leader;
+	if ((tsk->flags & PF_EXITING) && test_task_flag(tsk, TIF_MEMDIE)) {
+		set_tsk_thread_flag(current, TIF_MEMDIE);
+		rcu_read_unlock();
+		return 0;
+	}
+	rcu_read_unlock();
+
+	if (nr_to_scan > 0) {
+		if (mutex_lock_interruptible(&scan_mutex) < 0)
+			return 0;
+	}
+
+	other_free = global_page_state(NR_FREE_PAGES);
+
+	if (global_page_state(NR_SHMEM) + total_swapcache_pages() <
+		global_page_state(NR_FILE_PAGES))
+		other_file = global_page_state(NR_FILE_PAGES) -
+						global_page_state(NR_SHMEM) -
+						total_swapcache_pages();
 	else
 		other_file = 0;
-#endif
-
-	si_meminfo(&si);
-
-	other_free += other_file;
 
 	tune_lmk_param(&other_free, &other_file, sc);
 
@@ -571,39 +465,32 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		array_size = lowmem_minfree_size;
 	for (i = 0; i < array_size; i++) {
 		minfree = lowmem_minfree[i];
-		if (other_free < minfree) {
+		if (other_free + other_file < minfree) {
 			min_score_adj = lowmem_adj[i];
 			break;
 		}
 	}
 
-	if (sc->nr_to_scan > 0) {
-		ret = adjust_minadj(&min_score_adj);
-		lowmem_print(3, "lowmem_shrink %lu, %x, ofree %d %d, ma %hd\n",
-					sc->nr_to_scan, sc->gfp_mask, other_free,
-					other_file, min_score_adj);
-	}
+	ret = adjust_minadj(&min_score_adj);
+	lowmem_print(3, "lowmem_shrink %lu, %x, ofree %d %d, ma %hd\n",
+			nr_to_scan, sc->gfp_mask, other_free,
+			other_file, min_score_adj);
 
-	rem = global_page_state(NR_ACTIVE_ANON) +
-		global_page_state(NR_ACTIVE_FILE) +
-		global_page_state(NR_INACTIVE_ANON) +
-		global_page_state(NR_INACTIVE_FILE);
-	if (sc->nr_to_scan <= 0 || min_score_adj == OOM_SCORE_ADJ_MAX + 1) {
-		lowmem_print(5, "lowmem_shrink %lu, %x, return %lu\n",
-			     sc->nr_to_scan, sc->gfp_mask, rem);
+	if (min_score_adj == OOM_SCORE_ADJ_MAX + 1) {
+		lowmem_print(5, "lowmem_shrink %lu, %x, return 0\n",
+			     nr_to_scan, sc->gfp_mask);
 
+		if (nr_to_scan > 0)
+			mutex_unlock(&scan_mutex);
 
 		if ((min_score_adj == OOM_SCORE_ADJ_MAX + 1) &&
-			(sc->nr_to_scan > 0))
+			(nr_to_scan > 0))
 			trace_almk_shrink(0, ret, other_free, other_file, 0);
 
-		return 0;
+		return rem;
 	}
 
-
-	/* Set the initial oom_score_adj for each managed process type */
-	for (proc_type = KILLABLE_PROCESS; proc_type < MANAGED_PROCESS_TYPES; proc_type++)
-		selected_oom_score_adj[proc_type] = min_score_adj;
+	selected_oom_score_adj = min_score_adj;
 
 	rcu_read_lock();
 #ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
@@ -619,181 +506,89 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		if (tsk->flags & PF_KTHREAD)
 			continue;
 
+		/* if task no longer has any memory ignore it */
+		if (test_task_flag(tsk, TIF_MM_RELEASED))
+			continue;
+
 		if (time_before_eq(jiffies, lowmem_deathpending_timeout)) {
 			if (test_task_flag(tsk, TIF_MEMDIE)) {
+				int same_tgid = same_thread_group(current, tsk);
+
+#ifdef CONFIG_PROCESS_RECLAIM
+#ifdef PROCESS_RECLAIM_ENABLE_LOG
+				ktime_t reclaim_before;
+				ktime_t reclaim_after;
+				ktime_t reclaim_diff;
+				long free_before_kb;
+				long free_after_kb;
+				long file_before_kb;
+				long file_after_kb;
+#endif
+				bool rcu_locked = true;
+				/*
+				 if task is ZOMBIE, skip the task
+				 */
+				if (test_task_exit_state(tsk, EXIT_ZOMBIE))
+						continue;
+
+				p = find_lock_task_mm(tsk);
+				if (!p)
+					continue;
+				task_unlock(p);
+
+				/* if task is reclaimed */
+				if (test_task_flag(p, TIF_MM_RECLAIMED))
+					goto exit_timeout;
+
+				get_task_struct(p);
+				set_tsk_thread_flag(p, TIF_MM_RECLAIMED);
 				rcu_read_unlock();
-	        /* give the system time to free up the memory */
-        	msleep_interruptible(20);
+				rcu_locked = false;
+
+#ifdef PROCESS_RECLAIM_ENABLE_LOG
+				reclaim_before = ktime_get_boottime();
+				free_before_kb = global_page_state(NR_FREE_PAGES) *
+					(long)(PAGE_SIZE / 1024);
+				file_before_kb = global_page_state(NR_FILE_PAGES) *
+					(long)(PAGE_SIZE / 1024);
+#endif
+
+				if (reclaim_walk_mm(p, "file") < 0)
+					clear_tsk_thread_flag(p, TIF_MM_RECLAIMED);
+
+#ifdef PROCESS_RECLAIM_ENABLE_LOG
+				reclaim_after = ktime_get_boottime();
+				reclaim_diff = ktime_sub(reclaim_after, reclaim_before);
+
+				free_after_kb = global_page_state(NR_FREE_PAGES) *
+					(long)(PAGE_SIZE / 1024);
+				file_after_kb = global_page_state(NR_FILE_PAGES) *
+					(long)(PAGE_SIZE / 1024);
+
+				pr_err("LMK::reclaim_walk_mm() time, %ld, us, " \
+						"free inc, %ld, kb, file cache dec, %ld, kb \n",
+						(long)ktime_to_ns(reclaim_diff) / 1000,
+						free_after_kb - free_before_kb,
+						file_after_kb - file_before_kb);
+#endif
+
+				put_task_struct(p);
+exit_timeout:
+				if (rcu_locked)
+					rcu_read_unlock();
+#else
+				rcu_read_unlock();
+#endif
+				/* give the system time to free up the memory */
+				if (!same_tgid)
+					msleep_interruptible(20);
+				else
+					set_tsk_thread_flag(current,
+								TIF_MEMDIE);
+				mutex_unlock(&scan_mutex);
 				return 0;
 			}
 		}
-
-		p = find_lock_task_mm(tsk);
-		if (!p)
-			continue;
-
-		oom_score_adj = p->signal->oom_score_adj;
-		if (oom_score_adj < min_score_adj) {
-			task_unlock(p);
-#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
-			break;
-#else
-			continue;
-#endif
-		}
-		tasksize = get_mm_rss(p->mm);
-#if defined(CONFIG_ZSWAP)
-		if (atomic_read(&zswap_stored_pages)) {
-			lowmem_print(3, "shown tasksize : %d\n", tasksize);
-			tasksize += atomic_read(&zswap_pool_pages) * get_mm_counter(p->mm, MM_SWAPENTS)
-				/ atomic_read(&zswap_stored_pages);
-			lowmem_print(3, "real tasksize : %d\n", tasksize);
-		}
-#endif
-
-		task_unlock(p);
-		if (tasksize <= 0)
-			continue;
-#ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_DO_NOT_KILL_PROCESS
-		/* Check if the process name is contained inside the process to be preserved lists */
-		if (is_in_donotkill_proc_list(p->comm)) {
-			/* This user process must be preserved from killing */
-			proc_type = DO_NOT_KILL_PROCESS;
-			lowmem_print(2, "The process '%s' is inside the donotkill_proc_names", p->comm);
-		} else if (is_in_donotkill_sysproc_list(p->comm)) {
-			/* This system process must be preserved from killing */
-			proc_type = DO_NOT_KILL_SYSTEM_PROCESS;
-			lowmem_print(2, "The process '%s' is inside the donotkill_sysproc_names", p->comm);
-		}
-#endif
-
-		if (selected[proc_type]) {
-			if (oom_score_adj < selected_oom_score_adj[proc_type])
-				continue;
-			if (oom_score_adj == selected_oom_score_adj[proc_type] &&
-			    tasksize <= selected_tasksize[proc_type])
-				continue;
-		}
-		selected[proc_type] = p;
-		selected_tasksize[proc_type] = tasksize;
-		selected_oom_score_adj[proc_type] = oom_score_adj;
-		lowmem_print(2, "select '%s' (%d), adj %hd, size %d, to kill\n",
-			     p->comm, p->pid, oom_score_adj, tasksize);
-	}
-	/* For each managed process type check if a process to be killed has been found:
-	 * - check first if a standard killable process has been found, if so kill it
-	 * - if there is no killable process, then check if a user process has been found,
-	 *   if so kill it to prevent system slowdowns, hangs, etc.
-	 * - if there is no killable and user process, then check if a system process has been found,
-	 *   if so kill it to prevent system slowdowns, hangs, etc. */
-	for (proc_type = KILLABLE_PROCESS; proc_type < MANAGED_PROCESS_TYPES; proc_type++) {
-		if (selected[proc_type]) {
-			lowmem_print(1, "Killing '%s' (%d), adj %d,\n" \
-					"   to free %ldkB on behalf of '%s' (%d) because\n" \
-					"   cache %ldkB is below limit %ldkB for oom_score_adj %d\n" \
-					"   Free memory is %ldkB above reserved\n",
-					 selected[proc_type]->comm, selected[proc_type]->pid,
-					 selected_oom_score_adj[proc_type],
-					 selected_tasksize[proc_type] * (long)(PAGE_SIZE / 1024),
-					 current->comm, current->pid,
-					 other_file * (long)(PAGE_SIZE / 1024),
-					 minfree * (long)(PAGE_SIZE / 1024),
-					 min_score_adj,
-					 other_free * (long)(PAGE_SIZE / 1024));
-			lowmem_deathpending_timeout = jiffies + HZ;
-			send_sig(SIGKILL, selected[proc_type], 0);
-			set_tsk_thread_flag(selected[proc_type], TIF_MEMDIE);
-			rem -= selected_tasksize[proc_type];
-			break;
-		}
-	}
-
-	trace_almk_shrink(1, ret, other_free, other_file, 0);
-	rcu_read_unlock();
-
-		lowmem_lmkcount++;
-
-	lowmem_print(4, "lowmem_shrink %lu, %x, return %lu\n",
-		     sc->nr_to_scan, sc->gfp_mask, rem);
-	return rem;
-}
-
-/*
- * CONFIG_SEC_OOM_KILLER : klaatu@sec
- *
- * The way to select victim by oom-killer provided by
- * linux kernel is totally different from android policy.
- * Hence, it makes more sense that we select the oom victim
- * as android does when LMK is invoked.
- *
-*/
-#ifdef CONFIG_SEC_OOM_KILLER
-
-static int android_oom_handler(struct notifier_block *nb,
-				      unsigned long val, void *data)
-{
-	struct task_struct *tsk;
-#ifdef MULTIPLE_OOM_KILLER
-	struct task_struct *selected[OOM_DEPTH] = {NULL,};
-#else
-	struct task_struct *selected = NULL;
-#endif
-	int rem = 0;
-	int tasksize;
-	int i;
-	int min_score_adj = OOM_SCORE_ADJ_MAX + 1;
-#ifdef MULTIPLE_OOM_KILLER
-	int selected_tasksize[OOM_DEPTH] = {0,};
-	int selected_oom_score_adj[OOM_DEPTH] = {OOM_ADJUST_MAX,};
-	int all_selected_oom = 0;
-	int max_selected_oom_idx = 0;
-#else
-	int selected_tasksize = 0;
-	int selected_oom_score_adj;
-	const struct cred *pcred;
-	unsigned int uid;
-#endif
-#ifdef CONFIG_SEC_DEBUG_LMK_MEMINFO
-	static DEFINE_RATELIMIT_STATE(oom_rs, DEFAULT_RATELIMIT_INTERVAL/5, 1);
-#endif
-
-	unsigned long *freed = data;
-
-	/* show status */
-	pr_warning("%s invoked Android-oom-killer: "
-		" oom_score_adj=%d\n",
-		current->comm, current->signal->oom_score_adj);
-#ifdef CONFIG_SEC_DEBUG_LMK_MEMINFO
-	dump_stack();
-	show_mem(SHOW_MEM_FILTER_NODES);
-	if (__ratelimit(&oom_rs))
-		dump_tasks_info();
-#endif
-
-	min_score_adj = 0;
-#ifdef MULTIPLE_OOM_KILLER
-	for (i = 0; i < OOM_DEPTH; i++)
-		selected_oom_score_adj[i] = min_score_adj;
-#else
-	selected_oom_score_adj = min_score_adj;
-#endif
-
-	read_lock(&tasklist_lock);
-#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
-	for (tsk = pick_first_task();
-		tsk != pick_last_task() && tsk != NULL;
-		tsk = pick_next_from_adj_tree(tsk)) {
-#else
-	for_each_process(tsk) {
-#endif
-		struct task_struct *p;
-		int oom_score_adj;
-#ifdef MULTIPLE_OOM_KILLER
-		int is_exist_oom_task = 0;
-#endif
-
-		if (tsk->flags & PF_KTHREAD)
-			continue;
 
 		p = find_lock_task_mm(tsk);
 		if (!p)
@@ -819,47 +614,6 @@ static int android_oom_handler(struct notifier_block *nb,
 		task_unlock(p);
 		if (tasksize <= 0)
 			continue;
-
-		lowmem_print(2, "oom: ------ %d (%s), adj %d, size %d\n",
-			     p->pid, p->comm, oom_score_adj, tasksize);
-#ifdef MULTIPLE_OOM_KILLER
-		if (all_selected_oom < OOM_DEPTH) {
-			for (i = 0; i < OOM_DEPTH; i++) {
-				if (!selected[i]) {
-					is_exist_oom_task = 1;
-					max_selected_oom_idx = i;
-					break;
-				}
-			}
-		} else if (selected_oom_score_adj[max_selected_oom_idx] < oom_score_adj ||
-			(selected_oom_score_adj[max_selected_oom_idx] == oom_score_adj &&
-			selected_tasksize[max_selected_oom_idx] < tasksize)) {
-			is_exist_oom_task = 1;
-		}
-
-		if (is_exist_oom_task) {
-			selected[max_selected_oom_idx] = p;
-			selected_tasksize[max_selected_oom_idx] = tasksize;
-			selected_oom_score_adj[max_selected_oom_idx] = oom_score_adj;
-
-			if (all_selected_oom < OOM_DEPTH)
-				all_selected_oom++;
-
-			if (all_selected_oom == OOM_DEPTH) {
-				for (i = 0; i < OOM_DEPTH; i++) {
-					if (selected_oom_score_adj[i] < selected_oom_score_adj[max_selected_oom_idx])
-						max_selected_oom_idx = i;
-					else if (selected_oom_score_adj[i] == selected_oom_score_adj[max_selected_oom_idx] &&
-						selected_tasksize[i] < selected_tasksize[max_selected_oom_idx])
-						max_selected_oom_idx = i;
-				}
-			}
-
-			lowmem_print(2, "oom: max_selected_oom_idx(%d) select %d (%s), adj %d, \
-					size %d, to kill\n",
-				max_selected_oom_idx, p->pid, p->comm, oom_score_adj, tasksize);
-		}
-#else
 		if (selected) {
 			if (oom_score_adj < selected_oom_score_adj)
 #ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
@@ -871,77 +625,76 @@ static int android_oom_handler(struct notifier_block *nb,
 			    tasksize <= selected_tasksize)
 				continue;
 		}
-		pcred = __task_cred(p);
-		uid = pcred->uid;
-		if (avoid_to_kill(uid) || protected_apps(p->comm)){
-			if (tasksize * (long)(PAGE_SIZE / 1024) >= 100000){
-				selected = p;
-				selected_tasksize = tasksize;
-				selected_oom_score_adj = oom_score_adj;
-				lowmem_print(3, "select protected %d (%s), adj %hd, size %d, to kill\n",
-				     	p->pid, p->comm, oom_score_adj, tasksize);
-			} else
-			lowmem_print(3, "skip protected %d (%s), adj %hd, size %d, to kill\n",
-			     	p->pid, p->comm, oom_score_adj, tasksize);
-		} else {
-			selected = p;
-			selected_tasksize = tasksize;
-			selected_oom_score_adj = oom_score_adj;
-			lowmem_print(3, "select %d (%s), adj %hd, size %d, to kill\n",
-			     	p->pid, p->comm, oom_score_adj, tasksize);
-		}
-#endif
+		selected = p;
+		selected_tasksize = tasksize;
+		selected_oom_score_adj = oom_score_adj;
+		lowmem_print(3, "select '%s' (%d), adj %hd, size %d, to kill\n",
+			     p->comm, p->pid, oom_score_adj, tasksize);
 	}
-#ifdef MULTIPLE_OOM_KILLER
-	for (i = 0; i < OOM_DEPTH; i++) {
-		if (selected[i]) {
-			lowmem_print(1, "oom: send sigkill to %d (%s), adj %d,\
-				     size %d\n",
-				     selected[i]->pid, selected[i]->comm,
-				     selected_oom_score_adj[i],
-				     selected_tasksize[i]);
-			send_sig(SIGKILL, selected[i], 0);
-			rem -= selected_tasksize[i];
-			*freed += (unsigned long)selected_tasksize[i];
-#ifdef OOM_COUNT_READ
-			oom_count++;
-#endif
-
-		}
-	}
-#else
 	if (selected) {
-		lowmem_print(1, "oom: send sigkill to %d (%s), adj %d, size %d\n",
-			     selected->pid, selected->comm,
-			     selected_oom_score_adj, selected_tasksize);
+		lowmem_print(1, "Killing '%s' (%d), adj %hd,\n" \
+				"   to free %ldkB on behalf of '%s' (%d) because\n" \
+				"   cache %ldkB is below limit %ldkB for oom_score_adj %hd\n" \
+				"   Free memory is %ldkB above reserved.\n" \
+				"   Free CMA is %ldkB\n" \
+				"   Total reserve is %ldkB\n" \
+				"   Total free pages is %ldkB\n" \
+				"   Total file cache is %ldkB\n" \
+				"   Slab Reclaimable is %ldkB\n" \
+				"   Slab UnReclaimable is %ldkB\n" \
+				"   Total Slab is %ldkB\n" \
+				"   GFP mask is 0x%x\n",
+			     selected->comm, selected->pid,
+			     selected_oom_score_adj,
+			     selected_tasksize * (long)(PAGE_SIZE / 1024),
+			     current->comm, current->pid,
+			     other_file * (long)(PAGE_SIZE / 1024),
+			     minfree * (long)(PAGE_SIZE / 1024),
+			     min_score_adj,
+			     other_free * (long)(PAGE_SIZE / 1024),
+			     global_page_state(NR_FREE_CMA_PAGES) *
+				(long)(PAGE_SIZE / 1024),
+			     totalreserve_pages * (long)(PAGE_SIZE / 1024),
+			     global_page_state(NR_FREE_PAGES) *
+				(long)(PAGE_SIZE / 1024),
+			     global_page_state(NR_FILE_PAGES) *
+				(long)(PAGE_SIZE / 1024),
+			     global_page_state(NR_SLAB_RECLAIMABLE) *
+				(long)(PAGE_SIZE / 1024),
+			     global_page_state(NR_SLAB_UNRECLAIMABLE) *
+				(long)(PAGE_SIZE / 1024),
+			     global_page_state(NR_SLAB_RECLAIMABLE) *
+				(long)(PAGE_SIZE / 1024) +
+			     global_page_state(NR_SLAB_UNRECLAIMABLE) *
+				(long)(PAGE_SIZE / 1024),
+			     sc->gfp_mask);
+
+		if (lowmem_debug_level >= 2 && selected_oom_score_adj == 0) {
+			show_mem(SHOW_MEM_FILTER_NODES);
+			//dump_tasks(NULL, NULL);
+			show_mem_call_notifiers();
+		}
+
+		lowmem_deathpending_timeout = jiffies + HZ;
 		send_sig(SIGKILL, selected, 0);
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
-		rem -= selected_tasksize;
+		rem += selected_tasksize;
 		rcu_read_unlock();
-		*freed += (unsigned long)selected_tasksize;
-#ifdef OOM_COUNT_READ
-		oom_count++;
-#endif
+		lmk_count++;
 		/* give the system time to free up the memory */
 		msleep_interruptible(20);
-		if(reclaim_state)
-		 reclaim_state->reclaimed_slab += selected_tasksize;
-		} else {
+		trace_almk_shrink(selected_tasksize, ret,
+			other_free, other_file, selected_oom_score_adj);
+	} else {
+		trace_almk_shrink(1, ret, other_free, other_file, 0);
 		rcu_read_unlock();
 	}
-#endif
-	read_unlock(&tasklist_lock);
 
-	lowmem_print(2, "oom: get memory %lu", *freed);
+	lowmem_print(4, "lowmem_scan %lu, %x, return %ld\n",
+		     nr_to_scan, sc->gfp_mask, rem);
+	mutex_unlock(&scan_mutex);
 	return rem;
 }
-
-static struct notifier_block android_oom_notifier = {
-	.notifier_call = android_oom_handler,
-};
-
-
-#endif /* CONFIG_SEC_OOM_KILLER */
 
 static struct shrinker lowmem_shrinker = {
 	.scan_objects = lowmem_scan,
@@ -953,10 +706,6 @@ static int __init lowmem_init(void)
 {
 	register_shrinker(&lowmem_shrinker);
 	vmpressure_notifier_register(&lmk_vmpr_nb);
-#ifdef CONFIG_SEC_OOM_KILLER
-	register_oom_notifier(&android_oom_notifier);
-#endif
-
 	return 0;
 }
 
@@ -1000,7 +749,7 @@ static void lowmem_autodetect_oom_adj_values(void)
 		oom_adj = lowmem_adj[i];
 		oom_score_adj = lowmem_oom_adj_to_oom_score_adj(oom_adj);
 		lowmem_adj[i] = oom_score_adj;
-		lowmem_print(1, "oom_adj %hd => oom_score_adj %hd\n",
+		lowmem_print(1, "oom_adj %d => oom_score_adj %d\n",
 			     oom_adj, oom_score_adj);
 	}
 }
@@ -1142,7 +891,7 @@ module_param_named(cost, lowmem_shrinker.seeks, int, S_IRUGO | S_IWUSR);
 __module_param_call(MODULE_PARAM_PREFIX, adj,
 		    &lowmem_adj_array_ops,
 		    .arr = &__param_arr_adj,
-		    S_IRUGO | S_IWUSR, 0644);
+		    S_IRUGO | S_IWUSR, -1);
 __MODULE_PARM_TYPE(adj, "array of short");
 #else
 module_param_array_named(adj, lowmem_adj, short, &lowmem_adj_size,
@@ -1151,20 +900,10 @@ module_param_array_named(adj, lowmem_adj, short, &lowmem_adj_size,
 module_param_array_named(minfree, lowmem_minfree, uint, &lowmem_minfree_size,
 			 S_IRUGO | S_IWUSR);
 module_param_named(debug_level, lowmem_debug_level, uint, S_IRUGO | S_IWUSR);
-module_param_named(lmkcount, lowmem_lmkcount, uint, S_IRUGO);
+module_param_array_named(nul, lowmem_nul, uint, &lowmem_nul_size,
+			 S_IRUGO | S_IWUSR);
 module_param_named(lmk_fast_run, lmk_fast_run, int, S_IRUGO | S_IWUSR);
-#ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_DO_NOT_KILL_PROCESS
-module_param_named(donotkill_proc, donotkill_proc.enabled, uint, S_IRUGO | S_IWUSR);
-module_param_array_named(donotkill_proc_names, donotkill_proc.names, charp,
-			 &donotkill_proc.names_count, S_IRUGO | S_IWUSR);
-module_param_named(donotkill_sysproc, donotkill_sysproc.enabled, uint, S_IRUGO | S_IWUSR);
-module_param_array_named(donotkill_sysproc_names, donotkill_sysproc.names, charp,
-			 &donotkill_sysproc.names_count, S_IRUGO | S_IWUSR);
-#endif
-
-#ifdef OOM_COUNT_READ
-module_param_named(oomcount, oom_count, uint, S_IRUGO);
-#endif
+module_param_named(lmkcount, lmk_count, uint, S_IRUGO);
 
 module_init(lowmem_init);
 module_exit(lowmem_exit);
