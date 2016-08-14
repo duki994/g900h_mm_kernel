@@ -155,6 +155,10 @@ struct mdnie_info {
 	mdnie_t sequence_buffer[256];
 };
 
+void init_mdnie_control(struct mdnie_info *mdnie);
+mdnie_t mdnie_reg_hook(unsigned short reg, mdnie_t value); 
+void mdnie_update(struct mdnie_info *mdnie);
+
 extern int mdnie_calibration(int *r);
 extern int mdnie_open_file(const char *path, char **fp);
 extern int mdnie_register(struct device *p, void *data, mdnie_w w, mdnie_r r);
