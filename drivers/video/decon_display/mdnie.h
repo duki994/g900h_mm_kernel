@@ -163,5 +163,6 @@ extern int mdnie_calibration(int *r);
 extern int mdnie_open_file(const char *path, char **fp);
 extern int mdnie_register(struct device *p, void *data, mdnie_w w, mdnie_r r);
 extern struct mdnie_table *mdnie_request_table(char *path, struct mdnie_table *s);
+extern struct mdnie_command *cmds;
 
 #endif /* __MDNIE_H__ */

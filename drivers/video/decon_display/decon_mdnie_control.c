@@ -15,11 +15,11 @@
 #include <linux/sysfs.h>
 #include <linux/device.h>
 
-#include "./panels/mdnie.h"
+#include "mdnie.h"
 
 #define DEBUG 0
 
-#ifdef CONFIG_EXYNOS_DECON_MDNIE_LITE
+#ifdef CONFIG_DECON_MDNIE_LITE
 #define MDNIE_LITE
 struct mdnie_command *cmds;
 #endif
@@ -45,9 +45,9 @@ enum mdnie_registers {
 	SCR_S_MG_WG	= 0x9e,	/*ASCR skin_Mg skin_Wg*/
 	SCR_S_MB_WB	= 0x9f,	/*ASCR skin_Mb skin_Wb*/
 
-	SCR_RR_CR	= 0xa1,	/*SCR RrCr*/
-	SCR_RG_CG	= 0xa2,	/*SCR RgCg*/
-	SCR_RB_CB	= 0xa3,	/*SCR RbCb*/
+	SCR_RR_CR	= 0x68,	/*SCR RrCr*/
+	SCR_RG_CG	= 0x6A,	/*SCR RgCg*/
+	SCR_RB_CB	= 0x6C,	/*SCR RbCb*/
 
 	SCR_GR_MR	= 0xa4,	/*SCR GrMr*/
 	SCR_GG_MG	= 0xa5,	/*SCR GgMg*/
@@ -213,37 +213,37 @@ static struct mdnie_effect mdnie_controls[] = {
 
 	/* ASCR Wide */
 
-	_effect("wide_red_red"		, r(134, SCR_RR_CR	), 0xff00, 8	,1, 210	),
-	_effect("wide_red_green"	, r(136, SCR_RG_CG	), 0xff00, 8	,1, 27	),
-	_effect("wide_red_blue"		, r(138, SCR_RB_CB	), 0xff00, 8	,1, 42	),
+	_effect("wide_red_red"		, r(105, SCR_RR_CR	), 0xff00, 8	,1, 210	),
+	_effect("wide_red_green"	, r(107, SCR_RG_CG	), 0xff00, 8	,1, 27	),
+	_effect("wide_red_blue"		, r(109, SCR_RB_CB	), 0xff00, 8	,1, 42	),
 
-	_effect("wide_cyan_red"		, r(133, SCR_RR_CR	), 0x00ff, 0	,1, 148	),
-	_effect("wide_cyan_green"	, r(135, SCR_RG_CG	), 0x00ff, 0	,1, 240	),
-	_effect("wide_cyan_blue"	, r(137, SCR_RB_CB	), 0x00ff, 0	,1, 237	),
+	_effect("wide_cyan_red"		, r(104, SCR_RR_CR	), 0x00ff, 0	,1, 148	),
+	_effect("wide_cyan_green"	, r(106, SCR_RG_CG	), 0x00ff, 0	,1, 240	),
+	_effect("wide_cyan_blue"	, r(108, SCR_RB_CB	), 0x00ff, 0	,1, 237	),
 	
-	_effect("wide_green_red"	, r(140, SCR_GR_MR	), 0xff00, 8	,1, 138	),
-	_effect("wide_green_green"	, r(142, SCR_GG_MG	), 0xff00, 8	,1, 231	),
-	_effect("wide_green_blue"	, r(144, SCR_GB_MB	), 0xff00, 8	,1, 76	),
+	_effect("wide_green_red"	, r(111, SCR_GR_MR	), 0xff00, 8	,1, 138	),
+	_effect("wide_green_green"	, r(113, SCR_GG_MG	), 0xff00, 8	,1, 231	),
+	_effect("wide_green_blue"	, r(115, SCR_GB_MB	), 0xff00, 8	,1, 76	),
 
-	_effect("wide_magenta_red"	, r(139, SCR_GR_MR	), 0x00ff, 0	,1, 210	),
-	_effect("wide_magenta_green"	, r(141, SCR_GG_MG	), 0x00ff, 0	,1, 57	),
-	_effect("wide_magenta_blue"	, r(143, SCR_GB_MB	), 0x00ff, 0	,1, 222	),
+	_effect("wide_magenta_red"	, r(110, SCR_GR_MR	), 0x00ff, 0	,1, 210	),
+	_effect("wide_magenta_green"	, r(112, SCR_GG_MG	), 0x00ff, 0	,1, 57	),
+	_effect("wide_magenta_blue"	, r(114, SCR_GB_MB	), 0x00ff, 0	,1, 222	),
 	
-	_effect("wide_blue_red"		, r(146, SCR_BR_YR	), 0xff00, 8	,1, 38	),
-	_effect("wide_blue_green"	, r(148, SCR_BG_YG	), 0xff00, 8	,1, 53	),
-	_effect("wide_blue_blue"	, r(150, SCR_BB_YB	), 0xff00, 8	,1, 230	),
+	_effect("wide_blue_red"		, r(117, SCR_BR_YR	), 0xff00, 8	,1, 38	),
+	_effect("wide_blue_green"	, r(119, SCR_BG_YG	), 0xff00, 8	,1, 53	),
+	_effect("wide_blue_blue"	, r(121, SCR_BB_YB	), 0xff00, 8	,1, 230	),
 
-	_effect("wide_yellow_red"	, r(145, SCR_BR_YR	), 0x00ff, 0	,1, 248	),
-	_effect("wide_yellow_green"	, r(147, SCR_BG_YG	), 0x00ff, 0	,1, 238	),
-	_effect("wide_yellow_blue"	, r(149, SCR_BB_YB	), 0x00ff, 0	,1, 89	),
+	_effect("wide_yellow_red"	, r(116, SCR_BR_YR	), 0x00ff, 0	,1, 248	),
+	_effect("wide_yellow_green"	, r(118, SCR_BG_YG	), 0x00ff, 0	,1, 238	),
+	_effect("wide_yellow_blue"	, r(120, SCR_BB_YB	), 0x00ff, 0	,1, 89	),
 	
-	_effect("wide_black_red"	, r(152, SCR_KR_WR	), 0x00ff, 0	,1, 0	),
-	_effect("wide_black_green"	, r(154, SCR_KG_WG	), 0x00ff, 0	,1, 0	),
-	_effect("wide_black_blue"	, r(156, SCR_KB_WB	), 0x00ff, 0	,1, 0	),
+	_effect("wide_black_red"	, r(123, SCR_KR_WR	), 0x00ff, 0	,1, 0	),
+	_effect("wide_black_green"	, r(125, SCR_KG_WG	), 0x00ff, 0	,1, 0	),
+	_effect("wide_black_blue"	, r(127, SCR_KB_WB	), 0x00ff, 0	,1, 0	),
 
-	_effect("wide_white_red"	, r(151, SCR_KR_WR	), 0xff00, 8	,1, 255	),
-	_effect("wide_white_green"	, r(153, SCR_KG_WG	), 0xff00, 8	,1, 247	),
-	_effect("wide_white_blue"	, r(155, SCR_KB_WB	), 0xff00, 8	,1, 247	),
+	_effect("wide_white_red"	, r(122, SCR_KR_WR	), 0xff00, 8	,1, 255	),
+	_effect("wide_white_green"	, r(124, SCR_KG_WG	), 0xff00, 8	,1, 247	),
+	_effect("wide_white_blue"	, r(126, SCR_KB_WB	), 0xff00, 8	,1, 247	),
 
 	/* Greyscale gamma curve */
 	

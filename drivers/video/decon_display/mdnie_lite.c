@@ -46,7 +46,16 @@ static struct class *mdnie_class;
 static int mdnie_write(struct mdnie_info *mdnie, struct mdnie_table *table)
 {
 	int i, j, ret = 0;
+	
 
+#if 0
+	/* stock code*/
+	for (i = 0; i < ARRAY_SIZE(table->tune); i++) {
+		if (mdnie->enable)
+			ret = mdnie->ops.write(mdnie->data, table->tune[i].sequence, table->tune[i].size);
+	}
+	/* end of stock code*/
+#endif
 	if (mdnie->enable) {
 		for (j = 0; j < MDNIE_CMD_MAX; j++) {
 			for(i = 0; i < table->tune[j].size; i++) {
@@ -56,10 +65,11 @@ static int mdnie_write(struct mdnie_info *mdnie, struct mdnie_table *table)
 					cmds[j].sequence[i] = table->tune[j].sequence[i];
 			}
 			cmds[j].size = table->tune[j].size;
-			cmds[j].sleep = table->tune[j].sleep;
+
+			ret = mdnie->ops.write(mdnie->data, cmds[j].sequence, cmds[j].size);
 		}
 		
-#if 0
+#if	0
 		for (j = 0; j < MDNIE_CMD_MAX; j++) {
 			for(i = 0; i < cmds[j].size; i++) {
 				printk("mdnie: value on CMD%d: 0x%2X ( %3d ) val: 0x%2X ( %3d )\t -> val: 0x%2X ( %3d )\n",
@@ -69,7 +79,7 @@ static int mdnie_write(struct mdnie_info *mdnie, struct mdnie_table *table)
 			}
 		}
 #endif
-		ret = mdnie->ops.write(mdnie->data, cmds, MDNIE_CMD_MAX);
+
 	}
 
 	return ret;
