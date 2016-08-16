@@ -17,7 +17,7 @@
 
 #include "mdnie.h"
 
-#define DEBUG 0
+#define DEBUG	1
 
 #ifdef CONFIG_DECON_MDNIE_LITE
 #define MDNIE_LITE
