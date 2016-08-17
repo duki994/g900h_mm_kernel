@@ -49,12 +49,12 @@ static int mdnie_write(struct mdnie_info *mdnie, struct mdnie_table *table)
 	
 
 #if 0
-	/* stock code*/
+	/* stock code */
 	for (i = 0; i < ARRAY_SIZE(table->tune); i++) {
 		if (mdnie->enable)
 			ret = mdnie->ops.write(mdnie->data, table->tune[i].sequence, table->tune[i].size);
 	}
-	/* end of stock code*/
+	/* end of stock code */
 #endif
 	if (mdnie->enable) {
 		for (j = 0; j < MDNIE_CMD_MAX; j++) {
