@@ -362,11 +362,23 @@ static int secondary_hook(struct mdnie_effect *effect, int val)
 mdnie_t mdnie_reg_hook(unsigned short reg, mdnie_t value)
 {
 	struct mdnie_effect *effect = (struct mdnie_effect*)&mdnie_controls;
+#ifdef DEBUG
+	int j;
+#endif
 	int i;
 	int tmp, original;
 	mdnie_t regval;
-	
-	printk("mdnie: hook on: 0x%2X (%3d) val: 0x%2X (%3d)\n", reg, reg, value, value);
+
+	printk("mdnie: hook on: 0x%2X (%3d) val: 0x%2X (%3d)\n", 
+			reg, reg, value, value);
+
+#ifdef DEBUG
+	for (j = 0; j < ARRAY_SIZE(mdnie_controls); j++) {
+		if ((effect + j)->reg == reg)
+			printk("mdnie: known register hook on reg: 0x%2X (%3d) val: 0x%2X (%3d) effect: %s\n", 
+				reg, reg, value, value, (effect + j)->attribute.attr.name);
+	}
+#endif
 
 	original = value;
 
@@ -410,10 +422,9 @@ mdnie_t mdnie_reg_hook(unsigned short reg, mdnie_t value)
 #else
 		value = regval;
 #endif
-		
-#if DEBUG
-		printk("mdnie: hook on: 0x%X val: 0x%2X -> 0x%2X effect: %3d -> %3d : %s \n",
-			reg, original, value, original, value, effect->attribute.attr.name);
+#ifdef DEBUG
+		printk("mdnie: hook on: 0x%X (%3d) val: 0x%2X -> 0x%2X effect: %3d -> %3d : %s \n",
+			reg, reg, original, value, original, value, effect->attribute.attr.name);
 #endif
 	    }
 	    ++effect;
