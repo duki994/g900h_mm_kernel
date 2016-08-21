@@ -132,8 +132,10 @@ mdnie_t mdnie_reg_hook(unsigned short reg, mdnie_t value)
 	int tmp, original;
 	mdnie_t regval;
 
+#ifdef DEBUG
 	printk("mdnie: hook on: 0x%2X (%3d) val: 0x%2X (%3d)\n", 
 			reg, reg, value, value);
+#endif
 
 #ifdef DEBUG
 	for (j = 0; j < ARRAY_SIZE(mdnie_controls); j++) {
