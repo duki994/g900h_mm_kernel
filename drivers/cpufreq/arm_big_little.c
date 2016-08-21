@@ -177,6 +177,18 @@ static int bL_cpufreq_init(struct cpufreq_policy *policy)
 
 	cpufreq_frequency_table_get_attr(freq_table[cur_cluster], policy->cpu);
 
+	if (cur_cluster < MAX_CLUSTERS) {
+		int cpu;
+
+		cpumask_copy(policy->cpus, topology_core_cpumask(policy->cpu));
+
+		for_each_cpu(cpu, policy->cpus)
+			per_cpu(physical_cluster, cpu) = cur_cluster;
+	} else {
+		/* Assumption: during init, we are always running on A15 */
+		per_cpu(physical_cluster, policy->cpu) = A15_CLUSTER;
+	}
+
 	if (arm_bL_ops->get_transition_latency)
 		policy->cpuinfo.transition_latency =
 			arm_bL_ops->get_transition_latency(cpu_dev);
